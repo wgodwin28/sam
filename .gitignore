@@ -1,0 +1,8 @@
+monitoring/data
+*.DS_Store
+.Rproj.user
+*.Rhistory
+*.tex
+*.log
+monitoring/code/scripts/*.pdf
+monitoring/output
