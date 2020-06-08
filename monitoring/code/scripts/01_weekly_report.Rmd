@@ -157,7 +157,7 @@ ggplot(total_perday, aes(x = interview_date, y = as.integer(total), color = Step
 ```
 
 # Baseline characteristics
-```{r, echo=F, message=F}
+```{r, echo=F, message=F, warning=F}
 #calculate percent female
 female <- pluck(df_list, "baseline") %>%
   mutate(sex2=if_else(sex=="male", 0, 1)) %>%
@@ -224,7 +224,13 @@ pluck(df_list, "anthro") %>%
 
 # Anthropometry
 ```{r, echo=F, message=F}
+# fix muac - some are recorded in cm, some in mm. convert everything >45 to all cm
+pluck(df_list, "anthro") %<>%
+  mutate(muac=if_else(muac>45, muac/10, muac))
+
+# build anthro plots
 source(paste0(code_dir, "plot_anthro.R"), local = T)
+
 # function that produces sum and percent of binary vector input
 sum_n_percent <- function(x){
   s <- sum(x)
@@ -234,17 +240,28 @@ sum_n_percent <- function(x){
   return(paste0(s, " (", per, ")"))
 }
 
-# tabulate anthro indicators
-pluck(df_list, "anthro") %>%
+# make anthro indicators
+pluck(df_list, "anthro") %<>%
   mutate(whz3=if_else(whz_zscore < -3, 1, 0),
          muac11=if_else(muac < 11.5, 1, 0),
          waz3=if_else(waz_zscore < -3, 1, 0),
-         haz3=if_else(haz_zscore < -3, 1, 0)) %>%
-  group_by(csps_fra) %>%
-  summarise(sum_n_percent(whz3),
-            sum_n_percent(muac11),
-            sum_n_percent(waz3),
-            sum_n_percent(haz3)) %>%
+         haz3=if_else(haz_zscore < -3, 1, 0))
+
+#tabulate and table
+bind_rows(
+  pluck(df_list, "anthro") %>%
+    group_by(csps_fra) %>%
+    summarise(sum_n_percent(whz3),
+              sum_n_percent(muac11),
+              sum_n_percent(waz3),
+              sum_n_percent(haz3)),
+  pluck(df_list, "anthro") %>%
+    summarise(sum_n_percent(whz3),
+              sum_n_percent(muac11),
+              sum_n_percent(waz3),
+              sum_n_percent(haz3)) %>%
+    mutate(csps_fra="Overall")
+  ) %>%
   kable("latex", col.names = c("CSPS", "WHZ < -3", "MUAC < 11.5", "WAZ < -3",
                                "HAZ < -3")) %>%
   row_spec(0, bold=T)
@@ -437,7 +454,7 @@ find_duplicate_chids1 <- function(df_name, df_list){
   pluck(df_list, df_name) %>%
     filter(childID %in% ids) %>%
     group_by(childID) %>%
-    summarize(id=paste(d, collapse = "| |")) %>%
+    summarize(id=paste(d, collapse = " ")) %>%
     select(id, childID) %>%
     mutate(form=df_name)
 }
@@ -446,6 +463,7 @@ find_duplicate_chids1 <- function(df_name, df_list){
 forms <- c("eligibility", "baseline", "anthro", "malaria", "treatment", "rectal", "followup")
 map_df(forms, find_duplicate_chids1, df_list) %>%
   filter(!is.na(childID)) %>%
-  kable("latex", col.names = c("Interview IDs", "Child ID", "Child first name", "Form name")) %>%
-  row_spec(0, bold=T)
+  kable("latex", col.names = c("Interview IDs", "Child ID", "Form name")) %>%
+  row_spec(0, bold=T) %>%
+  column_spec(1, width = "3in")
 ```
