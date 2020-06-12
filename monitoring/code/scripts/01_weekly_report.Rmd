@@ -41,7 +41,7 @@ output:
 rm(list=ls())
 options(max.print = 10000)
 date <- format(Sys.Date(), "%d%b%Y")
-#date <- "20May2020"
+#date <- "10Jun2020"
 
 #disable scientific notation
 options(scipen = 999)
@@ -58,25 +58,31 @@ source(paste0(code_dir, "read_data.R"), local = T)
 ```
 
 ```{r overview, include=F}
+# number of csps
+overall_rowno <- pluck(df_list, "eligibility") %>% distinct(csps_fra) %>% nrow + 1
+
 # eligibility criteria
 el_crit <- c("abx_use", "clin_comp", "inpatient", "edema", "growth_faltering_illness", 
              "prior__admission", "feeding", "Study_area", "available", "consent")
 
+function(string, pattern){
+  grep(string, pattern, invert = T, value = T)
+}
 # create screened indicator
 pluck(df_list, "eligibility") %<>%
   mutate(screened = if_else(!duplicated(childID) | is.na(childID), 1, 0),
-         eligible = if_else(str_detect(inclusion_criteria, "consent"), 1, 0),
-         refused = if_else(str_detect(inclusion_criteria, "consent"), 0, 1), # need to edit this once we know what refusal looks like
-         enrolled = if_else(str_detect(inclusion_criteria, "consent"), 1, 0),
-         excluded_reasons = setdiff(inclusion_criteria, el_crit))
+         eligible = if_else(str_detect(inclusion_criteria, el_crit) & (muac_under115==1 | whz_zscore_ind==1), 1, 0),
+         refused = if_else(eligible==1 & is.na(childID), 1, 0), # need to edit this once we know what refusal looks like
+         enrolled = if_else(!is.na(childID), 1, 0),
+         excluded_reasons = grep(paste(el_crit, collapse = "|"), inclusion_criteria, value = T))
 
 # find reasons for exclusion
 
-#tabulate the indicators and create table
+# tabulate the indicators and create table
 temp.table <- 
   bind_rows(
     pluck(df_list, "eligibility") %>%
-    group_by(CSPS=csps) %>%
+    group_by(CSPS=csps_fra) %>%
     summarise(Screened = sum(screened),
               Eligible = sum(eligible),
               Refused = sum(refused),
@@ -89,14 +95,14 @@ temp.table <-
     mutate(CSPS="Overall")
   ) %>%
   kable("latex", align = "c") %>%
-  row_spec(0, bold=T)
+  row_spec(c(0, overall_rowno), bold=T)
 
-#tabulate the indicators for past 7 days and create table
+# tabulate the indicators for past 7 days and create table
 temp.table2 <- 
   bind_rows(
     pluck(df_list, "eligibility") %>%
     filter(Sys.Date() - interview_date < 7) %>%
-    group_by(CSPS=csps) %>%
+    group_by(CSPS=csps_fra) %>%
     summarise(Screened = sum(screened),
               Eligible = sum(eligible),
               Refused = sum(refused),
@@ -110,7 +116,7 @@ temp.table2 <-
     mutate(CSPS="Overall")
   ) %>%
   kable("latex", align = "c") %>%
-  row_spec(0, bold=T)
+  row_spec(c(0, overall_rowno), bold=T)
 ```
 
 \newpage
@@ -158,12 +164,86 @@ ggplot(total_perday, aes(x = interview_date, y = as.integer(total), color = Step
 
 # Baseline characteristics
 ```{r, echo=F, message=F, warning=F}
-#calculate percent female
+# fix muac - some are recorded in cm, some in mm. convert everything >45 to all cm
+pluck(df_list, "anthro") %<>%
+  mutate(muac=if_else(muac>45, muac/10, muac))
+
+# build anthro plots
+source(paste0(code_dir, "plot_anthro.R"), local = T)
+
+# produce formatted mean and standard deviation of vector
+mean_sd <- function(x){
+  # mean
+  m <- mean(x, na.rm = T) %>% round(1)
+  
+  # standard deviation
+  s <- sd(x, na.rm = T) %>% round(1)
+  
+  # return formatted product
+  return(paste0(m, " (", s, ")"))
+}
+
+# function that produces sum and percent of binary vector input
+sum_n_percent <- function(x){
+  s <- sum(x, na.rm = T)
+  
+  per <- percent(sum(x, na.rm = T)/length(x))
+  
+  return(paste0(s, " (", per, ")"))
+}
+
+# child and mother's age
+age <- pluck(df_list, "baseline") %>%
+  mutate(age_months = as.integer(age_months),
+         age_months = ifelse(Dob_known==1, difftime(Sys.Date(), child_dob)/30, age_months)) %>%
+  summarize("Child age (months), mean (SD)" = mean_sd(age_months),
+            "Mother's age (years), mean (SD)" = mean_sd(mothers_age)) %>%
+  pivot_longer(everything()) %>%
+  select(col1=name, col2=value)
+
+# calculate percent female
+female <- pluck(df_list, "baseline") %>%
+  mutate(sex2=if_else(sex=="male", 0, 1),
+         col1="Female sex, N (%)") %>%
+  group_by(col1) %>%
+  summarize(col2=sum_n_percent(sex2))
+
+# calculate percent currently breastfeeding
+breastfed <- pluck(df_list, "baseline") %>%
+  mutate(breast_fed=case_when(
+    breastfeed == 1 ~ 1,
+    breastfeed == 2 ~ 0
+  ),
+    col1="Breastfeeding, N (%)") %>%
+  group_by(col1) %>%
+  summarize(col2=sum_n_percent(breast_fed))
+
+# calculate anthro measurements
+anthro <- pluck(df_list, "anthro") %>%
+  filter(time_point=="baseline") %>%
+  summarise("MUAC, mean (SD)" = mean_sd(muac),
+            "WHZ, mean (SD)" = mean_sd(whz_zscore),
+            "WAZ, mean (SD)" = mean_sd(waz_zscore),
+            "HAZ, mean (SD)" = mean_sd(haz_zscore)) %>%
+  pivot_longer(everything()) %>%
+  select(col1=name, col2=value)
+
+# bind together
+bind_rows(age,
+          female,
+          breastfed,
+          anthro) %>%
+  kable("latex", col.names = c(" ", " "))
+```
+
+
+```{r, echo=F, warning=F}
+# calculate percent female
 female <- pluck(df_list, "baseline") %>%
   mutate(sex2=if_else(sex=="male", 0, 1)) %>%
   summarize(Female=percent(mean(sex2, na.rm = T)))
 
-#calculate percent currently breastfeeding
+# calculate percent currently breastfeeding
 breastfed <- pluck(df_list, "baseline") %>%
   mutate(breast_fed=case_when(
     breastfeed == 1 ~ 1,
@@ -171,10 +251,9 @@ breastfed <- pluck(df_list, "baseline") %>%
   )) %>%
   summarize("Breastfeeding"=percent(mean(breast_fed, na.rm = T)))
 
-#calculate age groups: 1-5 months, 6-11 months, 12-23 months, 24-59 months
+# calculate age groups: 1-5 months, 6-11 months, 12-23 months, 24-59 months
 ages <- pluck(df_list, "baseline") %>%
   mutate(
-    child_dob = as.Date(child_dob),
     age_months = as.integer(age_months),
     age_months = ifelse(Dob_known==1, difftime(Sys.Date(), child_dob)/30, age_months)) %>%
   mutate(age_months2 = case_when(
@@ -190,13 +269,12 @@ ages <- pluck(df_list, "baseline") %>%
   summarise_if(is.numeric, mean) %>%
   mutate_all(percent) %>%
   select(contains("months"))
-  #select("1-5 months", "6-11 months", "12-23 months", "24-59 months")
 
-#get total number
+# get total number
 total <- pluck(df_list, "baseline") %>%
   summarise(Total=n())
 
-#bind together and table
+# bind together and table
 bind_cols(female, ages, breastfed, total) %>%
   kable("latex") %>%
   row_spec(0, bold=T)
@@ -211,35 +289,20 @@ Breastfeeding = currently breastfeeding.
 ```{r, echo=F, message=F}
 #age histogram
 pluck(df_list, "anthro") %>%
+  filter(time_point=="baseline") %>%
   mutate(age_months = ifelse(Dob_known==1, difftime(Sys.Date(), child_dob)/30, age_months)) %>%
   ggplot(aes(age_months)) +
   geom_histogram() +
   theme_bw() +
-  #scale_x_continuous(breaks = seq(0,60,6)) +
+  scale_x_continuous(breaks = seq(0,60,6)) +
   xlab("Age (Months)") +
   ylab("Count")
 ```
 
-\vspace{2em}
+\vspace{1em}
 
 # Anthropometry
 ```{r, echo=F, message=F}
-# fix muac - some are recorded in cm, some in mm. convert everything >45 to all cm
-pluck(df_list, "anthro") %<>%
-  mutate(muac=if_else(muac>45, muac/10, muac))
-
-# build anthro plots
-source(paste0(code_dir, "plot_anthro.R"), local = T)
-
-# function that produces sum and percent of binary vector input
-sum_n_percent <- function(x){
-  s <- sum(x)
-  
-  per <- percent(sum(x)/length(x))
-  
-  return(paste0(s, " (", per, ")"))
-}
-
 # make anthro indicators
 pluck(df_list, "anthro") %<>%
   mutate(whz3=if_else(whz_zscore < -3, 1, 0),
@@ -247,15 +310,20 @@ pluck(df_list, "anthro") %<>%
          waz3=if_else(waz_zscore < -3, 1, 0),
          haz3=if_else(haz_zscore < -3, 1, 0))
 
+# number of csps
+overall_rowno <- pluck(df_list, "anthro") %>% distinct(csps_fra) %>% nrow + 1
+
 #tabulate and table
 bind_rows(
   pluck(df_list, "anthro") %>%
+    filter(time_point=="baseline") %>%
     group_by(csps_fra) %>%
     summarise(sum_n_percent(whz3),
               sum_n_percent(muac11),
               sum_n_percent(waz3),
               sum_n_percent(haz3)),
   pluck(df_list, "anthro") %>%
+    filter(time_point=="baseline") %>%
     summarise(sum_n_percent(whz3),
               sum_n_percent(muac11),
               sum_n_percent(waz3),
@@ -264,9 +332,11 @@ bind_rows(
   ) %>%
   kable("latex", col.names = c("CSPS", "WHZ < -3", "MUAC < 11.5", "WAZ < -3",
                                "HAZ < -3")) %>%
-  row_spec(0, bold=T)
+  row_spec(c(0, overall_rowno), bold=T)
 ```
 Total and percentage of participants that report WAZ < -3 SD (standard deviation), MUAC < -11.5 cm, WHZ < -3 SD, and HAZ < -3 SD.
+
+\newpage
 
 ## Weight versus age
 ```{r, echo=F, message=F, fig.height = 4.35, fig.width = 6.5}
@@ -317,6 +387,10 @@ p_female_mfa
 
 # Treatment
 ```{r, echo=F}
+# number of csps
+overall_rowno <- pluck(df_list, "treatment") %>% distinct(csps_fra) %>% nrow + 1
+
+# tabulate number of treated and table
 bind_rows(
   pluck(df_list, "treatment") %>%
     group_by(CSPS=csps_fra) %>%
@@ -326,12 +400,15 @@ bind_rows(
     mutate(CSPS="Overall")
 ) %>%
   kable("latex") %>%
-  row_spec(0, bold=T)
+  row_spec(c(0, overall_rowno), bold=T)
 ```
 
 
 # Malaria (Rapid Diagnostic Test results)
 ```{r, echo=F}
+# number of csps
+overall_rowno <- pluck(df_list, "malaria") %>% distinct(csps_fra) %>% nrow + 1
+
 # number of TDR per CSPS
 pluck(df_list, "malaria") %<>%
   mutate(total=1,
@@ -360,11 +437,15 @@ bind_rows(
 ) %>%
   kable("latex", col.names = c("CSPS", "Timepoint", "Total", "Positives", "Negatives",
                                "Missing", "Invalid", "HB Test")) %>%
-  row_spec(0, bold=T)
+  row_spec(c(0, overall_rowno), bold=T)
 ```
 
 # Rectal swabs
 ```{r, echo=F}
+# number of csps
+overall_rowno <- pluck(df_list, "rectal") %>% distinct(csps_fra) %>% nrow + 1
+
+# tabulate number of rectal swabs
 bind_rows(
   pluck(df_list, "rectal") %>%
     group_by(CSPS=csps_fra) %>%
@@ -374,18 +455,124 @@ bind_rows(
     mutate(CSPS="Overall")
 ) %>%
   kable("latex") %>%
-  row_spec(0, bold=T)
+  row_spec(c(0, overall_rowno), bold=T)
+```
+
+\vspace{2em}
+
+# General Follow-up
+## Actual to expected ratio-Vital status form
+```{r, echo=F}
+# tabulate lost to followup by timepoint
+df_ltfu <- pluck(df_list, "followup") %>%
+  mutate(ltfu=if_else(vital_status %in% c("moved", "unknown"), 1, 0)) %>%
+  group_by(time_point) %>%
+  summarize(ltfu=sum(ltfu))
+
+#expected to actual ratio
+pluck(df_list, "eligibility") %>%
+  filter(enrolled==1) %>%
+  select(childID, start_time) %>%
+  #identify expected visits based on today's date and enroll date
+  mutate("week_1"=if_else(Sys.Date()-start_time>=7, 1, 0),
+         "week_2"=if_else(Sys.Date()-start_time>=14, 1, 0),
+         "week_3"=if_else(Sys.Date()-start_time>=21, 1, 0),
+         "week_4"=if_else(Sys.Date()-start_time>=28, 1, 0)) %>%
+  gather(key = time_point, value = expected, -start_time, -childID) %>%
+  left_join(., 
+            pluck(df_list, "followup"), 
+            by=c("childID", "time_point")) %>%
+  select(childID, start_time.x, time_point, expected, d) %>%
+  group_by(time_point) %>%
+  #finds the number of actual interviews by summing total non-missing interview keys
+  summarise(expected=sum(expected), actual=sum(!is.na(d))) %>%
+  mutate(percnt=percent(actual/expected)) %>%
+  arrange(time_point) %>%
+  left_join(., df_ltfu, by="time_point") %>%
+  kable("latex", col.names = c("Timepoint", "Expected", "Actual", "Percent", "LTFU")) %>%
+  row_spec(c(0), bold=T)
+```
+LTFU=lost to follow-up (vital status is moved/unknown).
+
+## Actual to expected ratio-Anthro form
+```{r, echo=F}
+# anthro expected to actual ratio
+pluck(df_list, "eligibility") %>%
+  filter(enrolled==1) %>%
+  select(childID, start_time) %>%
+  #identify expected visits based on today's date and enroll date
+  mutate("week_1"=if_else(Sys.Date()-start_time>=7, 1, 0),
+         "week_2"=if_else(Sys.Date()-start_time>=14, 1, 0),
+         "week_3"=if_else(Sys.Date()-start_time>=21, 1, 0),
+         "week_4"=if_else(Sys.Date()-start_time>=28, 1, 0)) %>%
+  gather(key = time_point, value = expected, -start_time, -childID) %>%
+  left_join(., 
+            pluck(df_list, "anthro") %>% filter(time_point!="baseline"), 
+            by=c("childID", "time_point")) %>%
+  select(childID, start_time.x, time_point, expected, d) %>%
+  group_by(time_point) %>%
+  #finds the number of actual interviews by summing total non-missing interview keys
+  summarise(expected=sum(expected), actual=sum(!is.na(d))) %>%
+  mutate(percnt=percent(actual/expected)) %>%
+  arrange(time_point) %>%
+  kable("latex", col.names = c("Timepoint", "Expected", "Actual", "Percent")) %>%
+  row_spec(c(0), bold=T)
+```
+
+# Adverse events
+## Total participants displaying symptoms
+```{r, echo=F}
+# symptoms
+symptoms <- c("fever")
+# tabulate symptoms
+pluck(df_list, "followup") %>%
+  mutate(fever=ifelse(grepl("fever", symptoms), 1, 0),
+         diarrhea=ifelse(grepl("diarrhea", symptoms), 1, 0),
+         vomit=ifelse(grepl("vomiting", symptoms), 1, 0),
+         ab_pain=ifelse(grepl("abdominal_pain", symptoms), 1, 0),
+         rash=ifelse(grepl("skin_rash", symptoms), 1, 0),
+         constipation=ifelse(grepl("constipation", symptoms), 1, 0)) %>%
+  group_by(time_point) %>%
+  summarise(sum_n_percent(fever),
+            sum_n_percent(diarrhea),
+            sum_n_percent(vomit),
+            sum_n_percent(ab_pain),
+            sum_n_percent(rash),
+            sum_n_percent(constipation)) %>%
+  kable("latex", col.names = c("Timepoint", "Fever", "Diarrhea", "Vomiting", "Ab pain", "Skin rash", "Constipation")) %>%
+  row_spec(c(0), bold=T)
 ```
 
 # Discharge
+```{r, echo=F}
+# tabulate reason for exiting study
+pluck(df_list, "discharge") %>%
+  count(Reason=reason_for_discharge, name = "N") %>%
+  kable("latex") %>%
+  row_spec(0, bold=TRUE)
+```
+
+\vspace{2em}
+
+## Other reasons for discharge
+```{r, echo=F}
+# list other reasons
+pluck(df_list, "discharge") %>%
+  filter(reason_for_discharge=="other") %>%
+  select(childID, child_firstname, csps_fra, other_reason_for_discharge) %>%
+  kable("latex", col.names = c("Child ID", "Child name", "CSPS", "Reason")) %>%
+  row_spec(0, bold=TRUE)
+
+```
+\vspace{2em}
+
 ```{r, echo=F}
 # diplay discharge reason
 pluck(df_list, "discharge") %>%
   select(csps_fra, childID, child_firstname, date_of_discharge, reason_for_discharge) %>%
   kable("latex", col.names = c("CSPS", "Child ID", "Child first name", "Date of discharge", "Reason")) %>%
-  row_spec(0,bold=TRUE)
+  row_spec(0, bold=TRUE)
 ```
-
 
 \newpage
 
@@ -406,8 +593,8 @@ find_missing <- function(df1, df2, df_list) {
 
   #subset & table
   pluck(df_list, df1) %>%
-    filter(childID %in% ids_miss) %>% select(childID, child_firstname) %>%
-    kable("latex", col.names = c("Child ID", "Child first name")) %>%
+    filter(childID %in% ids_miss) %>% select(csps_fra, childID, child_firstname) %>%
+    kable("latex", col.names = c("CSPS", "Child ID", "Child first name")) %>%
     row_spec(0,bold=TRUE)
 }
 
@@ -419,8 +606,9 @@ check4.tab <- find_missing(df1 = "eligibility", df2 = "treatment", df_list = df_
 check5.tab <- find_missing(df1 = "treatment", df2 = "eligibility", df_list = df_list)
 check6.tab <- find_missing(df1 = "eligibility", df2 = "anthro", df_list = df_list)
 check7.tab <- find_missing(df1 = "eligibility", df2 = "malaria", df_list = df_list)
-#check8.tab <- find_missing(df1 = "malaria", df2 = "eligibility", df_list = df_list)
+check8.tab <- find_missing(df1 = "malaria", df2 = "eligibility", df_list = df_list)
 check9.tab <- find_missing(df1 = "eligibility", df2 = "rectal", df_list = df_list)
+check10.tab <- find_missing(df1 = "anthro", df2 = "eligibility", df_list = df_list)
 ```
 
 ### IDs in __eligibility__ form but not in __baseline__ form:
@@ -429,6 +617,8 @@ check9.tab <- find_missing(df1 = "eligibility", df2 = "rectal", df_list = df_lis
 `r check2.tab`
 ### IDs in **eligibility** form but not in **anthro** form:
 `r check6.tab`
+### IDs in **anthro** form but not in **eligibility** form:
+`r check10.tab`
 ### IDs in **baseline** form but not in **treatment** form:
 `r check3.tab`
 ### IDs in **eligibility** form but not in **treatment** form:
@@ -437,8 +627,12 @@ check9.tab <- find_missing(df1 = "eligibility", df2 = "rectal", df_list = df_lis
 `r check5.tab`
 ### IDs in **eligibility** form but not in **malaria** form:
 `r check7.tab`
+### IDs in **malaria** form but not in **eligibility** form:
+`r check8.tab`
 ### IDs in **eligibility** form but not in **rectal swab** form:
 `r check9.tab`
+
+\vspace{2em}
 
 ## Duplicate IDs
 ### Child IDs
@@ -453,9 +647,9 @@ find_duplicate_chids1 <- function(df_name, df_list){
   #isolate the IDs and collapse with the interview keys
   pluck(df_list, df_name) %>%
     filter(childID %in% ids) %>%
-    group_by(childID) %>%
+    group_by(csps_fra, childID, child_firstname) %>%
     summarize(id=paste(d, collapse = " ")) %>%
-    select(id, childID) %>%
+    select(csps_fra, id, childID, child_firstname) %>%
     mutate(form=df_name)
 }
 
@@ -463,7 +657,31 @@ find_duplicate_chids1 <- function(df_name, df_list){
 forms <- c("eligibility", "baseline", "anthro", "malaria", "treatment", "rectal", "followup")
 map_df(forms, find_duplicate_chids1, df_list) %>%
   filter(!is.na(childID)) %>%
-  kable("latex", col.names = c("Interview IDs", "Child ID", "Form name")) %>%
+  arrange(child_firstname) %>%
+  kable("latex", col.names = c("CSPS", "Interview IDs", "Child ID", "Child name", "Form name")) %>%
   row_spec(0, bold=T) %>%
-  column_spec(1, width = "3in")
+  column_spec(2, width = "3in")
+```
+
+\vspace{2em}
+
+## Anthro and Treatment weight discrepancy (>0.5 kg difference)
+```{r, echo=F, message=F, warning=F}
+# merge together treatment and anthro
+left_join(
+  # anthro weight
+  pluck(df_list, "anthro") %>%
+    filter(time_point=="baseline") %>%
+    select(csps_fra, child_firstname, childID, anthro_weight=weight),
+  
+  # treatment weight
+  pluck(df_list, "treatment") %>%
+    select(childID, child_weight),
+  
+  by="childID"
+) %>%
+  mutate(change_weight = round(abs(anthro_weight-child_weight), digits = 2)) %>%
+  filter(change_weight>.5) %>%
+  kable("latex", col.names = c("CSPS", "Child name", "Child ID", "Anthro wt", "Treat wt", "Difference (kg)")) %>%
+  row_spec(0, bold=T)
 ```

@@ -1,9 +1,23 @@
 #############################################################################
+#Functions###################################################################
+#############################################################################
+# use: drop all interviews specified by ID in incoming list
+drop_ints <- function(df_name, df_list, bad_interviews){
+  pluck(df_list, df_name) %>%
+    filter(d %in% setdiff(d, bad_interviews))
+}
+
+# add child name to avoid breaking report validation/duplicate check functions
+add_childname <- function(df_name, df_list){
+  pluck(df_list, df_name) %>%
+    mutate(child_firstname=if (exists("child_firstname", where=.)) as.character(child_firstname) else NA)
+}
+
+#############################################################################
 #Read in data################################################################
 #############################################################################
-date <- format(Sys.Date(), "%d%b%Y")
 dirs <- list.dirs(paste0(here::here(), "/monitoring/data/raw/", date))[2:10]
-forms <- c("eligibility", "baseline", "anthro", "malaria", "rectal", "treatment", "followup", "discharge", "missVisit")
+form_names <- c("eligibility", "baseline", "anthro", "malaria", "rectal", "treatment", "followup", "discharge", "missVisit")
 
 # read each form into large list
 df_list <- map(dirs, function(d){
@@ -11,7 +25,7 @@ df_list <- map(dirs, function(d){
   names(t) <- str_remove(names(t), "form.")
   return(t)
 }) %>%
-  setNames(forms)
+  setNames(form_names)
 
 # add average weight and height for anthro measurements
 pluck(df_list, "anthro") %<>%
@@ -22,5 +36,28 @@ pluck(df_list, "anthro") %<>%
          age_months = as.integer(age_months),
          ageInDays = ifelse(Dob_known==1, difftime(Sys.Date(), child_dob), age_months*30))
 
-pluck(df_list, "anthro") %>%
-  mutate(age_months = as.integer(age_months))
+#############################################################################
+#Clean data##################################################################
+#############################################################################
+# make date class
+pluck(df_list, "baseline") %<>%
+  mutate(child_dob = as.Date(child_dob))
+
+# change csps variable in eligibility form bc it's the only inconsistent one
+pluck(df_list, "eligibility") %<>%
+  rename(csps_fra=csps)
+
+#archive interviews##########################################################
+# read in list of interviews to drop
+int_IDs <- read_csv(paste0(tab_dir, "incident_log_table.csv")) %>%
+  pull(unique(interview_id))
+
+# drop bad or duplicate interviews
+df_list <- names(df_list) %>%
+  map(drop_ints, df_list, int_IDs) %>%
+  setNames(form_names)
+
+# add child name variable if missing
+df_list <- names(df_list) %>%
+  map(add_childname, df_list) %>%
+  setNames(form_names)

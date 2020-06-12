@@ -66,7 +66,7 @@ pluck(df_list, "anthro") %<>%
 #######################################################################################
 #weight versus age
 p_male_wfa <- pluck(df_list, "anthro") %>%
-  filter(sex=="male" & weight>0) %>%
+  filter(sex=="male" & weight>0 & time_point=="baseline") %>%
   ggplot(aes(ageInDays, weight)) +
   geom_line(data=chartdat_w, aes(Day, weight_male, color=SD)) +
   geom_point() +
@@ -80,7 +80,7 @@ p_male_wfa <- pluck(df_list, "anthro") %>%
 
 #weight versus age
 p_female_wfa <- pluck(df_list, "anthro") %>%
-  filter(sex=="female" & weight>0) %>%
+  filter(sex=="female" & weight>0 & time_point=="baseline") %>%
   ggplot(aes(ageInDays, weight)) +
   geom_line(data=chartdat_w, aes(Day, weight_female, color=SD)) +
   geom_point() +
@@ -95,7 +95,7 @@ p_female_wfa <- pluck(df_list, "anthro") %>%
 #scatter height versus age (days)
 #height versus age
 p_male_hfa <- pluck(df_list, "anthro") %>%
-  filter(sex=="male" & height>0) %>%
+  filter(sex=="male" & height>0 & time_point=="baseline") %>%
   ggplot(aes(ageInDays, height)) +
   geom_line(data=chartdat_h, aes(Day, height_male, color=SD)) +
   geom_point() +
@@ -108,7 +108,7 @@ p_male_hfa <- pluck(df_list, "anthro") %>%
 
 #height versus age
 p_female_hfa <- pluck(df_list, "anthro") %>%
-  filter(sex=="female" & height>0) %>%
+  filter(sex=="female" & height>0 & time_point=="baseline") %>%
   ggplot(aes(ageInDays, height)) +
   geom_line(data=chartdat_h, aes(Day, height_female, color=SD)) +
   geom_point() +
@@ -123,7 +123,7 @@ p_female_hfa <- pluck(df_list, "anthro") %>%
 ## Height Versus Weight ############################
 #scatter height versus weight (kg) 0-2 years
 p_male_wfh_2 <- pluck(df_list, "anthro") %>%
-  filter(sex=="male" & height>0 & ageInDays < 730) %>%
+  filter(sex=="male" & height>0 & ageInDays < 730 & time_point=="baseline") %>%
   ggplot(aes(height, weight)) +
   geom_line(data=chartdat_wfh_2, aes(height, wfh_male, color=SD)) +
   geom_point() +
@@ -136,7 +136,7 @@ p_male_wfh_2 <- pluck(df_list, "anthro") %>%
 
 #height versus weight 0-2 years
 p_female_wfh_2 <- pluck(df_list, "anthro") %>%
-  filter(sex=="female" & height>0 & weight>0 & ageInDays < 730) %>%
+  filter(sex=="female" & height>0 & weight>0 & ageInDays < 730 & time_point=="baseline") %>%
   ggplot(aes(height, weight)) +
   geom_line(data=chartdat_wfh_2, aes(height, wfh_female, color=SD)) +
   geom_point() +
@@ -150,11 +150,11 @@ p_female_wfh_2 <- pluck(df_list, "anthro") %>%
 # MUAC versus age ############################
 #males
 p_male_mfa <- pluck(df_list, "anthro") %>%
-  filter(sex=="male" & muac>0) %>%
+  filter(sex=="male" & muac>0 & time_point=="baseline") %>%
   ggplot(aes(ageInDays, muac)) +
   geom_line(data=chartdat_m, aes(Day, muac_male, color=SD)) +
-  # geom_hline(yintercept=c(11.5), linetype="dotted") +
-  # annotate("text", x=1000, y=11.2, label="Referral threshold") +
+  geom_hline(yintercept=c(11.5), linetype="dotted", color="red") +
+  annotate("text", x=1500, y=11.2, label="Referral threshold") +
   geom_point() +
   theme_bw() +
   ggtitle("Males") +
@@ -165,15 +165,14 @@ p_male_mfa <- pluck(df_list, "anthro") %>%
 
 #female
 p_female_mfa <- pluck(df_list, "anthro") %>%
-  filter(sex=="female" & muac>0) %>%
+  filter(sex=="female" & muac>0 & time_point=="baseline") %>%
   ggplot(aes(ageInDays, muac)) +
   geom_line(data=chartdat_m, aes(Day, muac_female, color=SD)) +
-  # geom_hline(yintercept=c(11.5), linetype="dotted") +
-  # annotate("text", x=1000, y=11.2, label="Referral threshold") +
+  geom_hline(yintercept=c(11.5), linetype="dotted", color="red") +
+  annotate("text", x=1500, y=11.2, label="Referral threshold") +
   geom_point() +
   theme_bw() +
   ggtitle("Females") +
-  #ylim(min(dt_list$anthro$MUAC, na.rm = T), max(dt_list$anthro$MUAC, na.rm = T)) +
   xlab("Age (days)") +
   ylab("MUAC (cm)") +
   scale_color_discrete(name="WHO Standard") +
