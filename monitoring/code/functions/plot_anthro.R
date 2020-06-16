@@ -154,7 +154,7 @@ p_male_mfa <- pluck(df_list, "anthro") %>%
   ggplot(aes(ageInDays, muac)) +
   geom_line(data=chartdat_m, aes(Day, muac_male, color=SD)) +
   geom_hline(yintercept=c(11.5), linetype="dotted", color="red") +
-  annotate("text", x=1500, y=11.2, label="Referral threshold") +
+  # annotate("text", x=1500, y=11.2, label="Referral threshold") +
   geom_point() +
   theme_bw() +
   ggtitle("Males") +
@@ -169,7 +169,6 @@ p_female_mfa <- pluck(df_list, "anthro") %>%
   ggplot(aes(ageInDays, muac)) +
   geom_line(data=chartdat_m, aes(Day, muac_female, color=SD)) +
   geom_hline(yintercept=c(11.5), linetype="dotted", color="red") +
-  annotate("text", x=1500, y=11.2, label="Referral threshold") +
   geom_point() +
   theme_bw() +
   ggtitle("Females") +
@@ -177,3 +176,90 @@ p_female_mfa <- pluck(df_list, "anthro") %>%
   ylab("MUAC (cm)") +
   scale_color_discrete(name="WHO Standard") +
   guides(color = guide_legend(reverse = TRUE))
+
+#######################################################################################
+##Growth curves########################################################################
+#######################################################################################
+## Height versus Age ############################
+ids_anthcurve <- pluck(df_list, "anthro") %>%
+  filter(time_point=="week_1") %>% distinct(childID) %>% pull
+
+#males
+p_male_grow_h <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "male") %>% 
+  select(childID, height, time_point, ageInDays) %>%
+  ggplot() +
+  geom_line(data=chartdat_h, aes(Day, height_male, color=SD)) +
+  geom_point(aes(ageInDays, height, shape=time_point)) +
+  geom_line(aes(ageInDays, height, group=childID)) +
+  theme_bw() +
+  xlab("Age (days)") +
+  ylab("Height (cm)") +
+  ggtitle("Males")
+
+#females
+p_female_grow_h <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "female") %>% 
+  select(childID, height, time_point, ageInDays) %>%
+  ggplot() +
+  geom_line(data=chartdat_h, aes(Day, height_female, color=SD)) +
+  geom_point(aes(ageInDays, height, shape=time_point)) +
+  geom_line(aes(ageInDays, height, group=childID)) +
+  theme_bw() +
+  xlab("Age (days)") +
+  ylab("Height (cm)") +
+  ggtitle("Females")
+
+## Weight versus Age ############################
+#males
+p_male_grow_w <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "male") %>% 
+  select(childID, weight, time_point, ageInDays) %>%
+  ggplot() +
+  geom_line(data=chartdat_w, aes(Day, weight_male, color=SD)) +
+  geom_point(aes(ageInDays, weight, shape=time_point)) +
+  geom_line(aes(ageInDays, weight, group=childID)) +
+  theme_bw() +
+  xlab("Age (days)") +
+  ylab("Weight (kg)") +
+  ggtitle("Males")
+
+#females
+p_female_grow_w <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "female") %>% 
+  select(childID, weight, time_point, ageInDays) %>%
+  ggplot() +
+  geom_line(data=chartdat_w, aes(Day, weight_female, color=SD)) +
+  geom_point(aes(ageInDays, weight, shape=time_point)) +
+  geom_line(aes(ageInDays, weight, group=childID)) +
+  theme_bw() +
+  xlab("Age (days)") +
+  ylab("Weight (kg)") +
+  ggtitle("Females")
+
+## MUAC versus Age ############################
+#males
+p_male_grow_m <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "male") %>% 
+  select(childID, muac, time_point, ageInDays) %>%
+  ggplot() +
+  geom_line(data=chartdat_m, aes(Day, muac_male, color=SD)) +
+  geom_point(aes(ageInDays, muac, shape=time_point)) +
+  geom_line(aes(ageInDays, muac, group=childID)) +
+  theme_bw() +
+  xlab("Age (days)") +
+  ylab("MUAC (cm)") +
+  ggtitle("Males")
+
+#females
+p_female_grow_m <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "female") %>% 
+  select(childID, muac, time_point, ageInDays) %>%
+  ggplot() +
+  geom_line(data=chartdat_m, aes(Day, muac_female, color=SD)) +
+  geom_point(aes(ageInDays, muac, shape=time_point)) +
+  geom_line(aes(ageInDays, muac, group=childID)) +
+  theme_bw() +
+  xlab("Age (days)") +
+  ylab("MUAC (cm)") +
+  ggtitle("Females")
