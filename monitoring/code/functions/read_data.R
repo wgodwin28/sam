@@ -13,6 +13,11 @@ add_childname <- function(df_name, df_list){
     mutate(child_firstname=if (exists("child_firstname", where=.)) as.character(child_firstname) else NA)
 }
 
+# make first letter of CSPS variable uppercase
+upper_csps <- function(df_name, df_list){
+  pluck(df_list, df_name) %>%
+    mutate(csps_fra=if (exists("csps_fra", where=.)) str_to_sentence(csps_fra) else NA)
+}
 #############################################################################
 #Read in data################################################################
 #############################################################################
@@ -47,6 +52,16 @@ pluck(df_list, "baseline") %<>%
 pluck(df_list, "eligibility") %<>%
   rename(csps_fra=csps)
 
+# add child name variable if missing
+df_list <- names(df_list) %>%
+  map(add_childname, df_list) %>%
+  setNames(form_names)
+
+# make csps uppercase
+df_list <- names(df_list) %>%
+  map(upper_csps, df_list) %>%
+  setNames(form_names)
+
 #archive interviews##########################################################
 # read in list of interviews to drop
 int_IDs <- read_csv(paste0(tab_dir, "incident_log_table.csv")) %>%
@@ -55,9 +70,4 @@ int_IDs <- read_csv(paste0(tab_dir, "incident_log_table.csv")) %>%
 # drop bad or duplicate interviews
 df_list <- names(df_list) %>%
   map(drop_ints, df_list, int_IDs) %>%
-  setNames(form_names)
-
-# add child name variable if missing
-df_list <- names(df_list) %>%
-  map(add_childname, df_list) %>%
   setNames(form_names)
