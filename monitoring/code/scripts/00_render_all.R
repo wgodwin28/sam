@@ -28,7 +28,7 @@ if(day == "Friday"){
   #weekly report
   rmarkdown::render(paste0(code_dir_main, "01_weekly_report.rmd"),
                     output_format ="pdf_document",
-                    output_file = paste0(out_dir_w, "sam_weekly_report_", date),
+                    output_file = paste0(out_dir_w, "sam_daily_report_", date),
                     envir = new.env())
 }else{
   #daily report

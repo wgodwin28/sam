@@ -4,7 +4,7 @@
 # use: drop all interviews specified by ID in incoming list
 drop_ints <- function(df_name, df_list, bad_interviews){
   pluck(df_list, df_name) %>%
-    filter(d %in% setdiff(d, bad_interviews))
+    filter(id %in% setdiff(id, bad_interviews))
 }
 
 # add child name to avoid breaking report validation/duplicate check functions
@@ -21,12 +21,23 @@ upper_csps <- function(df_name, df_list){
 #############################################################################
 #Read in data################################################################
 #############################################################################
-dirs <- list.dirs(paste0(here::here(), "/monitoring/data/raw/", date))[2:10]
-form_names <- c("eligibility", "baseline", "anthro", "malaria", "rectal", "treatment", "followup", "discharge", "missVisit")
+# dirs <- list.dirs(paste0(here::here(), "/monitoring/data/raw/", date))[2:10]
+# form_names <- c("eligibility", "baseline", "anthro", "malaria", "rectal", "treatment", "followup", "discharge", "miss_visit")
+# 
+# # read each form into large list
+# df_list <- map(dirs, function(d){
+#   t <- read_csv(paste0(d, "/Forms.csv"))
+#   names(t) <- str_remove(names(t), "form.")
+#   return(t)
+# }) %>%
+#   setNames(form_names)
+
+in_dir <- paste0(data_dir, date)
+form_names <- c("eligibility", "baseline", "anthro", "malaria", "rectal", "treatment", "followup", "discharge", "miss_visit")
 
 # read each form into large list
-df_list <- map(dirs, function(d){
-  t <- read_csv(paste0(d, "/Forms.csv"))
+df_list <- map(form_names, function(f){
+  t <- read_csv(paste0(in_dir, "/", f, ".csv"))
   names(t) <- str_remove(names(t), "form.")
   return(t)
 }) %>%
@@ -39,7 +50,7 @@ pluck(df_list, "anthro") %<>%
          muac = (muac_1 + muac_2 + muac_3) / 3,
          child_dob = as.Date(child_dob),
          age_months = as.integer(age_months),
-         ageInDays = ifelse(Dob_known==1, difftime(Sys.Date(), child_dob), age_months*30))
+         ageInDays = ifelse(Dob_known==1, difftime(as.Date(start_time), child_dob), age_months*30))
 
 #############################################################################
 #Clean data##################################################################

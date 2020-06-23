@@ -36,12 +36,13 @@ output:
 
 ```
 
+
 ```{r setup, include=FALSE}
 # clear memory
 rm(list=ls())
 options(max.print = 10000)
 date <- format(Sys.Date(), "%d%b%Y")
-#date <- "16Jun2020"
+#date <- "18Jun2020"
 
 #disable scientific notation
 options(scipen = 999)
@@ -51,6 +52,18 @@ source(paste0(here::here(), "/monitoring/code/functions/config.R"))
 
 #load utility package full of necessary functions
 #devtools::load_all('~/Desktop/utility/')
+```
+
+```{bash, eval=F, echo=F}
+# bash script to export all the dataz
+commcare-export --output-format csv --output ../../data/raw/temp.zip --project nouna-pilots --query ../../tables/api_metadata.xlsx --username william.godwin@ucsf.edu --password Mordor2018! --since 2020-06-01
+```
+
+```{r, echo=F}
+# unzip zip file
+date <- format(Sys.Date(), "%d%b%Y")
+zipF <- paste0(data_dir, "temp.zip")
+unzip(zipF, exdir=paste0(data_dir, date))
 ```
 
 ```{r read data, include=F}
@@ -78,15 +91,15 @@ temp.table <-
   bind_rows(
     pluck(df_list, "eligibility") %>%
     group_by(CSPS=csps_fra) %>%
-    summarise(Screened = sum(screened),
-              Eligible = sum(eligible),
-              Refused = sum(refused),
-              Enrolled = sum(enrolled)),
+    summarise(Screened = sum(screened, na.rm = T),
+              Eligible = sum(eligible, na.rm = T),
+              Refused = sum(refused, na.rm = T),
+              Enrolled = sum(enrolled, na.rm = T)),
     pluck(df_list, "eligibility") %>%
-    summarise(Screened = sum(screened),
-              Eligible = sum(eligible),
-              Refused = sum(refused),
-              Enrolled = sum(enrolled)) %>%
+    summarise(Screened = sum(screened, na.rm = T),
+              Eligible = sum(eligible, na.rm = T),
+              Refused = sum(refused, na.rm = T),
+              Enrolled = sum(enrolled, na.rm = T)) %>%
     mutate(CSPS="Overall")
   ) %>%
   kable("latex", align = "c") %>%
@@ -98,16 +111,16 @@ temp.table2 <-
     pluck(df_list, "eligibility") %>%
     filter(Sys.Date() - interview_date < 7) %>%
     group_by(CSPS=csps_fra) %>%
-    summarise(Screened = sum(screened),
-              Eligible = sum(eligible),
-              Refused = sum(refused),
-              Enrolled = sum(enrolled)),
+    summarise(Screened = sum(screened, na.rm = T),
+              Eligible = sum(eligible, na.rm = T),
+              Refused = sum(refused, na.rm = T),
+              Enrolled = sum(enrolled, na.rm = T)),
     pluck(df_list, "eligibility") %>%
     filter(Sys.Date() - interview_date < 7) %>%
-    summarise(Screened = sum(screened),
-              Eligible = sum(eligible),
-              Refused = sum(refused),
-              Enrolled = sum(enrolled)) %>%
+    summarise(Screened = sum(screened, na.rm = T),
+              Eligible = sum(eligible, na.rm = T),
+              Refused = sum(refused, na.rm = T),
+              Enrolled = sum(enrolled, na.rm = T)) %>%
     mutate(CSPS="Overall")
   ) %>%
   kable("latex", align = "c") %>%
@@ -420,12 +433,12 @@ DN <- add_one(DN)
 ```
 
 ## Weight versus age (Display `r DN`)
-```{r, echo=F, message=F, fig.height = 4.35, fig.width = 6.5}
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
 #plot wfa males
 p_male_wfa
 ```
 
-```{r, echo=F, message=F, fig.height = 4.35, fig.width = 6.5}
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
 #plot wfa females
 p_female_wfa
 ```
@@ -436,12 +449,12 @@ DN <- add_one(DN)
 ```
 
 ## Height versus age (Display `r DN`)
-```{r, echo=F, message=F, fig.height = 4.35, fig.width = 6.5}
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
 #plot hfa males
 p_male_hfa
 ```
 
-```{r, echo=F, message=F, fig.height = 4.35, fig.width = 6.5}
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
 #plot hfa females
 p_female_hfa
 ```
@@ -588,7 +601,7 @@ bind_rows(
                                "Missing", "Invalid", "HB Test")) %>%
   row_spec(c(0, overall_rowno), bold=T)
 ```
-**HG Test** = "Total hemoglobin tests performed"
+**HB Test** = "Total hemoglobin tests performed"
 
 
 ```{r, echo=F, eval=F}
@@ -677,39 +690,44 @@ df_dis <- pluck(df_list, "discharge") %>%
   group_by(time_point) %>%
   summarise(discharge=sum(discharge))
 
-#expected to actual ratio for weeks 5-7 (exclude discharged kids)
+# expected to actual ratio for weeks 5-7 (exclude discharged kids)
 discharge_ids <- pluck(df_list, "discharge") %>% distinct(childID) %>% pull
 df_5to7 <- pluck(df_list, "eligibility") %>%
   filter(enrolled==1 & childID %in% setdiff(childID, discharge_ids)) %>%
-  select(childID, start_time) %>%
-  mutate("week_5"=if_else(Sys.Date()-start_time>=35, 1, 0),
-         "week_6"=if_else(Sys.Date()-start_time>=42, 1, 0),
-         "week_7"=if_else(Sys.Date()-start_time>=49, 1, 0)) %>%
-  gather(key = time_point, value = expected, -start_time, -childID) %>%
+  select(childID, enroll_date=start_time) %>%
+  mutate("week_5"=if_else(Sys.Date()-enroll_date>=35, 1, 0),
+         "week_6"=if_else(Sys.Date()-enroll_date>=42, 1, 0),
+         "week_7"=if_else(Sys.Date()-enroll_date>=49, 1, 0)) %>%
+  gather(key = time_point, value = expected, -enroll_date, -childID) %>%
   left_join(., 
             pluck(df_list, "followup") %>% filter(!duplicated(uniqID)), 
             by=c("childID", "time_point")) %>%
-  select(childID, start_time.x, time_point, expected, d)
+  select(childID, enroll_date, time_point, expected, id)
 
-#expected to actual ratio
-pluck(df_list, "eligibility") %>%
+# expected to actual ratio
+df_followup <- pluck(df_list, "eligibility") %>%
   filter(enrolled==1) %>%
-  select(childID, start_time) %>%
+  select(childID, enroll_date=start_time, csps_fra, child_firstname) %>%
   #identify expected visits based on today's date and enroll date
-  mutate("week_1"=if_else(Sys.Date()-start_time>=7, 1, 0),
-         "week_2"=if_else(Sys.Date()-start_time>=14, 1, 0),
-         "week_3"=if_else(Sys.Date()-start_time>=21, 1, 0),
-         "week_4"=if_else(Sys.Date()-start_time>=28, 1, 0),
-         "week_8"=if_else(Sys.Date()-start_time>=56, 1, 0)) %>%
-  gather(key = time_point, value = expected, -start_time, -childID) %>%
+  mutate("week_1"=if_else(Sys.Date()-enroll_date>=7, 1, 0),
+         "week_2"=if_else(Sys.Date()-enroll_date>=14, 1, 0),
+         "week_3"=if_else(Sys.Date()-enroll_date>=21, 1, 0),
+         "week_4"=if_else(Sys.Date()-enroll_date>=28, 1, 0),
+         "week_8"=if_else(Sys.Date()-enroll_date>=56, 1, 0)) %>%
+  gather(key = time_point, value = expected, -enroll_date, -childID, -csps_fra, -child_firstname) %>%
   left_join(., 
-            pluck(df_list, "followup") %>% filter(!duplicated(uniqID)), 
+            pluck(df_list, "followup") %>% 
+              filter(!duplicated(uniqID)) %>% 
+              select(id, childID, time_point), 
             by=c("childID", "time_point")) %>%
-  select(childID, start_time.x, time_point, expected, d) %>%
-  bind_rows(., df_5to7) %>%
+  select(childID, enroll_date, time_point, expected, id, csps_fra, child_firstname) %>%
+  bind_rows(., df_5to7)
+
+# make table of the actual to expected ratios
+df_followup %>%
   group_by(time_point) %>%
   #finds the number of actual interviews by summing total non-missing interview keys
-  summarise(expected=sum(expected), actual=sum(!is.na(d))) %>%
+  summarise(expected=sum(expected), actual=sum(!is.na(id))) %>%
   mutate(percnt=percent(actual/expected)) %>%
   arrange(time_point) %>%
   left_join(., df_ltfu, by="time_point") %>%
@@ -723,7 +741,25 @@ pluck(df_list, "eligibility") %>%
 **Coverage** = fraction of actual over expected visits.
 Number expected for Weeks 5 through 7 are the number of kids who are in the week 5-7 windows and who have not had a discharge form submitted.
 **Missing forms** = No follow-up form of any kind (including discharge or moved/unknown) submitted.
-**N discharged** = N with discharge form submitted.
+**N discharged** = number with discharge form submitted.
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+### Participants missing follow-up (Display `r DN`)
+```{r, echo=F}
+# make table of kids missing follow-up
+df_followup %>% 
+  filter(expected==1 & is.na(id)) %>%
+  arrange(csps_fra, childID, time_point) %>%
+  select(csps_fra, childID, time_point, child_firstname, enroll_date) %>%
+  kable("latex", col.names = c("CSPS", "Child ID", "Time point", "Child name", "Enroll date")) %>%
+  row_spec(c(0), bold=T) # %>%
+  # collapse_rows(1:2, latex_hline = 'custom', custom_latex_hline = 1:2,
+  #               row_group_label_position = 'identity')
+```
 
 ```{r, echo=F}
 # display number
@@ -794,10 +830,10 @@ pluck(df_list, "eligibility") %>%
   left_join(., 
             pluck(df_list, "anthro") %>% filter(time_point!="baseline" & !duplicated(uniqID)), 
             by=c("childID", "time_point")) %>%
-  select(childID, start_time.x, time_point, expected, d) %>%
+  select(childID, start_time.x, time_point, expected, id) %>%
   group_by(time_point) %>%
   #finds the number of actual interviews by summing total non-missing interview keys
-  summarise(expected=sum(expected), actual=sum(!is.na(d))) %>%
+  summarise(expected=sum(expected), actual=sum(!is.na(id))) %>%
   mutate(percnt=percent(actual/expected)) %>%
   arrange(time_point) %>%
   kable("latex", col.names = c("Timepoint", "Expected", "Actual", "Percent")) %>%
@@ -1066,7 +1102,7 @@ find_duplicate_chids1 <- function(df_name, df_list){
   pluck(df_list, df_name) %>%
     filter(childID %in% ids) %>%
     group_by(csps_fra, childID, child_firstname) %>%
-    summarize(id=paste(d, collapse = " ")) %>%
+    summarize(id=paste(id, collapse = " ")) %>%
     select(csps_fra, id, childID, child_firstname) %>%
     mutate(form=df_name)
 }

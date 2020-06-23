@@ -31,8 +31,8 @@ chartdat_m <- data.frame(SD = rep(sd_labels, each = 1818),
                            who_centile2muaccm(8:1825, p, sex="Female"))))
 
 #weight for height 0-2 years
-ht_min <- min(pluck(df_list, "anthro") %>% filter(ageInDays < 730) %>% select(height)) %>% round() - 1
-ht_max <- max(pluck(df_list, "anthro") %>% filter(ageInDays < 730) %>% select(height)) %>% round() + 1
+ht_min <- min(pluck(df_list, "anthro") %>% filter(ageInDays < 730) %>% select(height), na.rm = T) %>% round() - 1
+ht_max <- max(pluck(df_list, "anthro") %>% filter(ageInDays < 730) %>% select(height), na.rm = T) %>% round() + 1
 chartdat_wfh_2 <- data.frame(SD = rep(sd_labels, each = ht_max-ht_min+1),
                              height = rep(ht_min:ht_max, times = 7),
                              wfh_male = unlist(map(p_frmSD, function(p) 
@@ -186,7 +186,7 @@ ids_anthcurve <- pluck(df_list, "anthro") %>%
 
 #males
 p_male_grow_h <- pluck(df_list, "anthro") %>%
-  filter(childID %in% ids_anthcurve & sex == "male") %>% 
+  filter(childID %in% ids_anthcurve & sex == "male") %>%
   select(childID, height, time_point, ageInDays) %>%
   ggplot() +
   geom_line(data=chartdat_h, aes(Day, height_male, color=SD)) +
@@ -196,6 +196,26 @@ p_male_grow_h <- pluck(df_list, "anthro") %>%
   xlab("Age (days)") +
   ylab("Height (cm)") +
   ggtitle("Males")
+  
+# pluck(df_list, "anthro") %>%
+#   mutate(months_cat=cut(ageInDays, 
+#                         breaks = seq(1, 1825, length.out=10),
+#                         labels = paste0(c("0-6", "6-12", "12-18", "18-24", "24-30", "30-36", "36-42", "42-48", "48-54", "54-60"), " months"))) %>% 
+#   select(ageInDays, months_cat)
+# 
+# 
+# 
+# p_male_grow_h <- pluck(df_list, "anthro") %>%
+#   filter(childID %in% ids_anthcurve & sex == "male") %>%
+#   select(childID, height, time_point, ageInDays, age_months) %>%
+#   ggplot() +
+#   #geom_line(data=chartdat_h, aes(Day, height_male, color=SD)) +
+#   geom_point(aes(time_point, height)) +
+#   geom_line(aes(time_point, height, group=childID, color=months_cat)) +
+#   theme_bw() +
+#   xlab("Visit") +
+#   ylab("Height (cm)") +
+#   ggtitle("Males")
 
 #females
 p_female_grow_h <- pluck(df_list, "anthro") %>%
@@ -254,7 +274,7 @@ p_male_grow_m <- pluck(df_list, "anthro") %>%
 #females
 p_female_grow_m <- pluck(df_list, "anthro") %>%
   filter(childID %in% ids_anthcurve & sex == "female") %>% 
-  select(childID, muac, time_point, ageInDays) %>%
+  select(childID, muac, time_point, ageInDays, Dob_known) %>%
   ggplot() +
   geom_line(data=chartdat_m, aes(Day, muac_female, color=SD)) +
   geom_point(aes(ageInDays, muac, shape=time_point)) +

@@ -32,7 +32,7 @@ letters <- randomize(ID_vec = IDs, treat_vec = treat)
 write_csv(letters, "monitoring/tables/tr_letters_sam.csv")
 
 # sample without replacement
-t <- sample(450, 100)
+t <- sample(450, 150)
 
 # rectal ones
 r <- IDs[t]
