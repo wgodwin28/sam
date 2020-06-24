@@ -178,7 +178,7 @@ p_female_mfa <- pluck(df_list, "anthro") %>%
   guides(color = guide_legend(reverse = TRUE))
 
 #######################################################################################
-##Growth curves########################################################################
+##Growth curve over age################################################################
 #######################################################################################
 ## Height versus Age ############################
 ids_anthcurve <- pluck(df_list, "anthro") %>%
@@ -196,26 +196,6 @@ p_male_grow_h <- pluck(df_list, "anthro") %>%
   xlab("Age (days)") +
   ylab("Height (cm)") +
   ggtitle("Males")
-  
-# pluck(df_list, "anthro") %>%
-#   mutate(months_cat=cut(ageInDays, 
-#                         breaks = seq(1, 1825, length.out=10),
-#                         labels = paste0(c("0-6", "6-12", "12-18", "18-24", "24-30", "30-36", "36-42", "42-48", "48-54", "54-60"), " months"))) %>% 
-#   select(ageInDays, months_cat)
-# 
-# 
-# 
-# p_male_grow_h <- pluck(df_list, "anthro") %>%
-#   filter(childID %in% ids_anthcurve & sex == "male") %>%
-#   select(childID, height, time_point, ageInDays, age_months) %>%
-#   ggplot() +
-#   #geom_line(data=chartdat_h, aes(Day, height_male, color=SD)) +
-#   geom_point(aes(time_point, height)) +
-#   geom_line(aes(time_point, height, group=childID, color=months_cat)) +
-#   theme_bw() +
-#   xlab("Visit") +
-#   ylab("Height (cm)") +
-#   ggtitle("Males")
 
 #females
 p_female_grow_h <- pluck(df_list, "anthro") %>%
@@ -283,3 +263,151 @@ p_female_grow_m <- pluck(df_list, "anthro") %>%
   xlab("Age (days)") +
   ylab("MUAC (cm)") +
   ggtitle("Females")
+
+
+#######################################################################################
+##Growth curve over study period#######################################################
+#######################################################################################
+# make months variable
+pluck(df_list, "anthro") %<>%
+  mutate(Months=cut(ageInDays,
+                    breaks = seq(1, 1825, length.out=11),
+                    labels = c("0-6", "6-12", "12-18", "18-24", "24-30", "30-36", "36-42", "42-48", "48-54", "54-60")))
+
+# plot haz
+p_male_study_haz <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "male") %>%
+  select(childID, haz_zscore, time_point, ageInDays, Months) %>%
+  ggplot() +
+  geom_point(aes(time_point, haz_zscore, group=childID)) +
+  geom_line(aes(time_point, haz_zscore, group=childID, color=Months)) +
+  theme_bw() +
+  scale_color_viridis_d(direction=-1) +
+  labs(col="Age (months)") +
+  xlab("Visit") +
+  ylab("HAZ-score") +
+  ggtitle("Males")
+
+#convert to plotly
+p_male_study_haz <- if(make_plotly) ggplotly(p_male_study_haz) else p_male_study_haz
+
+# plot haz for girls
+p_female_study_haz <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "female") %>%
+  select(childID, haz_zscore, time_point, ageInDays, Months) %>%
+  ggplot() +
+  geom_point(aes(time_point, haz_zscore, group=childID)) +
+  geom_line(aes(time_point, haz_zscore, group=childID, color=Months)) +
+  theme_bw() +
+  scale_color_viridis_d(direction=-1) +
+  labs(col="Age (months)") +
+  xlab("Visit") +
+  ylab("HAZ-score") +
+  ggtitle("Females")
+
+#convert to plotly
+p_female_study_haz <- if(make_plotly) ggplotly(p_female_study_haz) else p_female_study_haz
+
+# plot waz
+p_male_study_waz <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "male") %>%
+  select(childID, waz_zscore, time_point, ageInDays, Months, id) %>%
+  ggplot() +
+  geom_point(aes(time_point, waz_zscore, group=childID, text=id)) +
+  geom_line(aes(time_point, waz_zscore, group=childID, color=Months)) +
+  scale_color_viridis_d(direction=-1) +
+  #scale_color_manual(values=wes_palette(name="GrandBudapest2")) +
+  theme_bw() +
+  labs(col="Age (months)") +
+  xlab("Visit") +
+  ylab("WAZ-score") +
+  ggtitle("Males")
+
+#convert to plotly
+p_male_study_waz <- if(make_plotly) ggplotly(p_male_study_waz) else p_male_study_waz
+
+# plot waz for girls
+p_female_study_waz <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "female") %>%
+  select(childID, waz_zscore, time_point, ageInDays, Months, id) %>%
+  ggplot() +
+  geom_point(aes(time_point, waz_zscore, group=childID, text=id)) +
+  geom_line(aes(time_point, waz_zscore, group=childID, color=Months)) +
+  scale_color_viridis_d(direction=-1) +
+  #scale_color_manual(values=wes_palette(name="GrandBudapest2")) +
+  theme_bw() +
+  labs(col="Age (months)") +
+  xlab("Visit") +
+  ylab("WAZ-score") +
+  ggtitle("Females")
+
+#convert to plotly
+p_female_study_waz <- if(make_plotly) ggplotly(p_female_study_waz) else p_female_study_waz
+
+# plot whz
+p_male_study_whz <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "male") %>%
+  select(childID, whz_zscore, time_point, ageInDays, Months, id) %>%
+  ggplot() +
+  geom_point(aes(time_point, whz_zscore, group=childID, text=id)) +
+  geom_line(aes(time_point, whz_zscore, group=childID, color=Months)) +
+  scale_color_viridis_d(direction=-1) +
+  theme_bw() +
+  labs(col="Age (months)") +
+  xlab("Visit") +
+  ylab("WHZ-score") +
+  ggtitle("Males")
+
+#convert to plotly
+p_male_study_whz <- if(make_plotly) ggplotly(p_male_study_whz) else p_male_study_whz
+
+# plot waz for girls
+p_female_study_whz <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "female") %>%
+  select(childID, whz_zscore, time_point, ageInDays, Months, id) %>%
+  ggplot() +
+  geom_point(aes(time_point, whz_zscore, group=childID, text=id)) +
+  geom_line(aes(time_point, whz_zscore, group=childID, color=Months)) +
+  scale_color_viridis_d(direction=-1) +
+  theme_bw() +
+  labs(col="Age (months)") +
+  xlab("Visit") +
+  ylab("WHZ-score") +
+  ggtitle("Females")
+
+#convert to plotly
+p_female_study_whz <- if(make_plotly) ggplotly(p_female_study_whz) else p_female_study_whz
+
+# muac males
+p_male_study_muac <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "male") %>%
+  select(childID, muac, time_point, ageInDays, Months, id) %>%
+  ggplot() +
+  geom_point(aes(time_point, muac, group=childID, text=id)) +
+  geom_line(aes(time_point, muac, group=childID, color=Months)) +
+  scale_color_viridis_d(direction=-1) +
+  theme_bw() +
+  labs(col="Age (months)") +
+  xlab("Visit") +
+  ylab("MUAC") +
+  ggtitle("Males")
+
+#convert to plotly
+p_male_study_muac <- if(make_plotly) ggplotly(p_male_study_muac) else p_male_study_muac
+
+# muac males
+p_female_study_muac <- pluck(df_list, "anthro") %>%
+  filter(childID %in% ids_anthcurve & sex == "female") %>%
+  select(childID, muac, time_point, ageInDays, Months, id) %>%
+  ggplot() +
+  geom_point(aes(time_point, muac, group=childID, text=id)) +
+  geom_line(aes(time_point, muac, group=childID, color=Months)) +
+  scale_color_viridis_d(direction=-1) +
+  theme_bw() +
+  labs(col="Age (months)") +
+  xlab("Visit") +
+  ylab("MUAC") +
+  ggtitle("Females")
+
+#convert to plotly
+p_female_study_muac <- if(make_plotly) ggplotly(p_female_study_muac) else p_female_study_muac

@@ -45,3 +45,24 @@ d <- data.frame(id=c(r, nr), rectal=c(rep(1,100), rep(0,350)))
 
 # save
 write_csv(d, "monitoring/tables/rectal_letter_sam.csv")
+
+
+# fix the unbalanced treatment groups for rectal swabbing
+# read in randomized ids
+tr <- read_csv("monitoring/tables/tr_letters_sam.csv")
+re <- read_csv("monitoring/tables/rectal_letter_sam.csv")
+
+# extract already used IDs
+ids <- pluck(df_list, "treatment") %>% distinct(childID) %>% pull
+
+# subset to only ids that have not been used
+tr <- tr %>% filter(childID %in% setdiff(childID, ids))
+table(tr$assign)
+re <- re %>% filter(id %in% setdiff(id, ids))
+
+# join rectal and treatment allocation
+b <- re %>%
+  select(childID=id, rectal) %>%
+  left_join(tr, by="childID")
+
+b %>% group_by(rectal) %>% count(assign)

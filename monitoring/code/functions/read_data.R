@@ -18,6 +18,12 @@ upper_csps <- function(df_name, df_list){
   pluck(df_list, df_name) %>%
     mutate(csps_fra=if (exists("csps_fra", where=.)) str_to_sentence(csps_fra) else NA)
 }
+
+# convert to date class
+convert_date <- function(df_name, df_list){
+  pluck(df_list, df_name) %>%
+    mutate(start_time=as.Date(received_on))
+}
 #############################################################################
 #Read in data################################################################
 #############################################################################
@@ -43,15 +49,6 @@ df_list <- map(form_names, function(f){
 }) %>%
   setNames(form_names)
 
-# add average weight and height for anthro measurements
-pluck(df_list, "anthro") %<>%
-  mutate(weight = (weight_1 + weight_2 + weight_3) / 3,
-         height = (height_1 + height_2 + height_3) / 3,
-         muac = (muac_1 + muac_2 + muac_3) / 3,
-         child_dob = as.Date(child_dob),
-         age_months = as.integer(age_months),
-         ageInDays = ifelse(Dob_known==1, difftime(as.Date(start_time), child_dob), age_months*30))
-
 #############################################################################
 #Clean data##################################################################
 #############################################################################
@@ -72,6 +69,30 @@ df_list <- names(df_list) %>%
 df_list <- names(df_list) %>%
   map(upper_csps, df_list) %>%
   setNames(form_names)
+
+# convert date variable to date class
+df_list <- names(df_list) %>%
+  map(convert_date, df_list) %>%
+  setNames(form_names)
+
+#anthro fixes###################################################################
+# add average weight and height for anthro measurements
+pluck(df_list, "anthro") %<>%
+  mutate(weight = (weight_1 + weight_2 + weight_3) / 3,
+         height = (height_1 + height_2 + height_3) / 3,
+         muac = (muac_1 + muac_2 + muac_3) / 3,
+         child_dob = as.Date(child_dob),
+         age_months = as.integer(age_months),
+         ageInDays = ifelse(Dob_known==1, difftime(as.Date(start_time), child_dob), age_months*30))
+
+# fix muac - some are recorded in cm, some in mm. convert everything >45 to all cm
+pluck(df_list, "anthro") %<>%
+  mutate(muac=if_else(muac>45, muac/10, muac))
+
+# these two interviews are actually week 2
+pluck(df_list, "anthro") %<>%
+  mutate(time_point = ifelse(id=="26f7c048-f591-4f07-a1bc-bc88b69cdfeb", "week_2", time_point),
+         time_point = ifelse(id=="32255e9a-69e5-41ce-afce-6d5acc8a7d95", "week_2", time_point))
 
 #archive interviews##########################################################
 # read in list of interviews to drop

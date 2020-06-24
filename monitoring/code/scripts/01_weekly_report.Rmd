@@ -42,7 +42,7 @@ output:
 rm(list=ls())
 options(max.print = 10000)
 date <- format(Sys.Date(), "%d%b%Y")
-#date <- "18Jun2020"
+#date <- "23Jun2020"
 
 #disable scientific notation
 options(scipen = 999)
@@ -192,6 +192,50 @@ ggplot(total_perday, aes(x = interview_date, y = as.integer(total), color = Step
 DN <- add_one(DN)
 ```
 
+## CONSORT Diagram (Display `r DN`)
+```{r consort diagram, echo=F, warning=F}
+# Values
+con_screened <- pluck(df_list, "eligibility") %>% summarise(sum(screened, na.rm = T)) %>% pull
+con_eligible <- pluck(df_list, "eligibility") %>% summarise(sum(eligible, na.rm = T)) %>% pull
+con_ineligble <- con_screened - con_eligible
+con_enrolled <- pluck(df_list, "eligibility") %>% summarise(sum(enrolled, na.rm = T)) %>% pull
+con_notenrolled <- con_eligible - con_enrolled
+con_treated <- pluck(df_list, "treatment") %>% distinct(childID) %>% nrow
+con_lostfollowup <- pluck(df_list, "followup") %>% 
+  filter(time_point=="week_8" & (vital_status=="moved" | vital_status=="unknown")) %>%
+  distinct(childID) %>% nrow
+con_reach6mo <- pluck(df_list, "followup") %>% 
+  filter(time_point=="week_8" & vital_status=="alive") %>%
+  distinct(childID) %>% nrow
+values <- c(con_screened, con_ineligble, con_eligible, con_notenrolled,
+            con_enrolled, con_lostfollowup, con_reach6mo)
+#values <- c(210, 10, 200, 100, 100, 10, 60)
+
+# Text Labels-must be same length as values above
+text <- c("Assessed for\neligibility",
+          "Ineligible",
+          "Eligible",
+          "Refused/\nNot enrolled",
+          "Randomized",
+          "Lost to Follow-up",
+          "Reached 8-week \noutcome")
+
+#generate data for flowchart
+consort_data <- paste0(text, "(N=", values, ")")
+#substitute(paste0(text, "(", italic("N="), values, ")"))
+#consort_data <- paste0(text, "(", substitute(paste0(italic("N="))), values, ")")
+generate_consort(consort_data)
+```
+
+**Lost to Follow-up**-total participants with "moved" or "unknown" vital status at week 8.
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+\newpage
+
 ## Reasons ineligible (Display `r DN`)
 ```{r, echo=F, message=F, warning=F}
 # identify each reason for exclusion
@@ -242,11 +286,8 @@ DN <- add_one(DN)
 
 # Baseline characteristics (Display `r DN`)
 ```{r, echo=F, message=F, warning=F}
-# fix muac - some are recorded in cm, some in mm. convert everything >45 to all cm
-pluck(df_list, "anthro") %<>%
-  mutate(muac=if_else(muac>45, muac/10, muac))
-
 # build anthro plots
+make_plotly <- F
 source(paste0(code_dir, "plot_anthro.R"), local = T)
 
 # produce formatted mean and standard deviation of vector
@@ -500,13 +541,20 @@ DN <- add_one(DN)
 ### Height for Age (Display `r DN`)
 ```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
 #plot height males
-p_male_grow_h
+#p_male_grow_h
+p_male_study_haz
 ```
+
+Growth curves of individual participants over the study period. Each line represents one participant.
+
 
 ```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
 #plot height females
-p_female_grow_h
+#p_female_grow_h
+p_female_study_haz
 ```
+
+Growth curves of individual participants over the study period. Each line represents one participant.
 
 ```{r, echo=F}
 # display number
@@ -516,12 +564,35 @@ DN <- add_one(DN)
 ### Weight for Age (Display `r DN`)
 ```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
 #plot weight males
-p_male_grow_w
+#p_male_grow_w
+p_male_study_waz
 ```
+
+Growth curves of individual participants over the study period. Each line represents one participant.
 
 ```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
 #plot weight females
-p_female_grow_w
+#p_female_grow_w
+p_female_study_waz
+```
+
+Growth curves of individual participants over the study period. Each line represents one participant.
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+### Weight for Height (Display `r DN`)
+
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot whz males
+p_male_study_whz
+```
+
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot whz females
+p_female_study_whz
 ```
 
 ```{r, echo=F}
@@ -531,12 +602,20 @@ DN <- add_one(DN)
 
 ### MUAC for Age (Display `r DN`)
 ```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
-p_male_grow_m
+#p_male_grow_m
+p_male_study_muac
 ```
 
+Growth curves of individual participants over the study period. Each line represents one participant.
+
+
 ```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
-p_female_grow_m
+#p_female_grow_m
+p_female_study_muac
 ```
+
+Growth curves of individual participants over the study period. Each line represents one participant.
+
 
 ```{r, echo=F}
 # display number
@@ -544,7 +623,7 @@ DN <- add_one(DN)
 ```
 
 # Treatment (Display `r DN`)
-```{r, echo=F}
+```{r, echo=F, message=F, warning=F}
 # number of csps
 overall_rowno <- pluck(df_list, "treatment") %>% distinct(csps_fra) %>% nrow + 1
 
@@ -567,7 +646,7 @@ DN <- add_one(DN)
 ```
 
 # Malaria-rapid diagnostic test results (Display `r DN`)
-```{r, echo=F}
+```{r, echo=F, message=F, warning=F}
 # number of csps
 overall_rowno <- pluck(df_list, "malaria") %>% distinct(csps_fra) %>% nrow + 1
 
@@ -604,7 +683,7 @@ bind_rows(
 **HB Test** = "Total hemoglobin tests performed"
 
 
-```{r, echo=F, eval=F}
+```{r, echo=F, eval=F, message=F, warning=F}
 ## Hemoglobin test (Display 14)
 pluck(df_list, "malaria") %>%
   group_by(CSPS=csps_fra, time_point) %>%
@@ -630,7 +709,7 @@ DN <- add_one(DN)
 ```
 
 # Rectal swabs (Display `r DN`)
-```{r, echo=F}
+```{r, echo=F, message=F, warning=F}
 # number of csps
 overall_rowno <- pluck(df_list, "rectal") %>% distinct(csps_fra) %>% nrow + 1
 
@@ -667,7 +746,7 @@ DN <- add_one(DN)
 
 # General Follow-up
 ## Actual to expected ratio-Vital status form (Display `r DN`)
-```{r, echo=F}
+```{r, echo=F, message=F, warning=F}
 # make child ID unique key in follow-up forms
 pluck(df_list, "anthro") %<>% mutate(uniqID=paste0(childID, "_", time_point))
 pluck(df_list, "followup") %<>% mutate(uniqID=paste0(childID, "_", time_point))
@@ -749,7 +828,7 @@ DN <- add_one(DN)
 ```
 
 ### Participants missing follow-up (Display `r DN`)
-```{r, echo=F}
+```{r, echo=F, message=F, warning=F}
 # make table of kids missing follow-up
 df_followup %>% 
   filter(expected==1 & is.na(id)) %>%
@@ -767,7 +846,7 @@ DN <- add_one(DN)
 ```
 
 ## Recovery by CSPS (Display `r DN`)
-```{r, echo=F}
+```{r, echo=F, message=F, warning=F}
 # number of csps
 overall_rowno <- pluck(df_list, "anthro") %>% 
   filter(time_point!="baseline" & time_point!="week_1") %>% 
@@ -816,7 +895,7 @@ DN <- add_one(DN)
 ```
 
 ## Actual to expected ratio-Anthro form (Display `r DN`)
-```{r, echo=F}
+```{r, echo=F, message=F, warning=F}
 # anthro expected to actual ratio
 pluck(df_list, "eligibility") %>%
   filter(enrolled==1) %>%
@@ -846,7 +925,7 @@ DN <- add_one(DN)
 ```
 
 ## Wasting, Underweight, Stunting (Display `r DN`)
-```{r, echo=F}
+```{r, echo=F, message=F, warning=F}
 # number of csps
 overall_rowno <- pluck(df_list, "anthro") %>% distinct(time_point) %>% nrow
 
@@ -905,7 +984,7 @@ pluck(df_list, "discharge") %>%
 
 \vspace{2em}
 
-```{r, echo=F}
+```{r, echo=F, message=F}
 # diplay discharge reason
 pluck(df_list, "discharge") %>%
   select(csps_fra, childID, child_firstname, date_of_discharge, reason_for_discharge) %>%
@@ -922,7 +1001,7 @@ DN <- add_one(DN)
 
 # Adverse events
 ## Total participants displaying symptoms (Display `r DN`)
-```{r, echo=F, warning=F}
+```{r, echo=F, warning=F, message=F}
 # tabulate symptoms
 pluck(df_list, "followup") %>%
   mutate(fever=ifelse(grepl("fever", symptoms), 1, 0),
@@ -949,7 +1028,7 @@ DN <- add_one(DN)
 ```
 
 ## Total participants visiting health facility (Display `r DN`)
-```{r, echo=F, warning=F}
+```{r, echo=F, warning=F, message=F}
 # tabulate visits and reason for visits
 pluck(df_list, "followup") %>%
   mutate(fever=ifelse(grepl("fever", reason_care), 1, 0),
@@ -977,7 +1056,7 @@ DN <- add_one(DN)
 ```
 
 ## Total participants hospitalized (Display `r DN`)
-```{r, echo=F, warning=F}
+```{r, echo=F, warning=F, message=F}
 # tabulate visits and reason for visits
 pluck(df_list, "followup") %>%
   mutate(fever=ifelse(grepl("fever", other_reason_hospital), 1, 0),
@@ -1005,7 +1084,7 @@ DN <- add_one(DN)
 ```
 
 ### List of participants hospitalized for malnutrition lacking a discharge form (Display `r DN`)
-```{r, echo=F}
+```{r, echo=F, message=F, warning=F}
 # find kids w discharge form
 discharge_ids <- pluck(df_list, "discharge") %>% distinct(childID) %>% pull
 
@@ -1027,7 +1106,7 @@ DN <- add_one(DN)
 
 # Child ID and sample ID validation
 ## Missing forms (Display `r DN`)
-```{r, echo=F}
+```{r, echo=F, message=F, warning=F}
 #missing form function
 find_missing <- function(df1, df2, df_list) {
   #find all IDs in df2
@@ -1097,10 +1176,11 @@ find_duplicate_chids1 <- function(df_name, df_list){
   ids <- pluck(df_list, df_name) %>%
     filter(!is.na(childID) & duplicated(childID)) %>% 
     pull(unique(childID))
-  
+
   #isolate the IDs and collapse with the interview keys
   pluck(df_list, df_name) %>%
     filter(childID %in% ids) %>%
+    mutate(child_firstname=as.character(child_firstname)) %>%
     group_by(csps_fra, childID, child_firstname) %>%
     summarize(id=paste(id, collapse = " ")) %>%
     select(csps_fra, id, childID, child_firstname) %>%
