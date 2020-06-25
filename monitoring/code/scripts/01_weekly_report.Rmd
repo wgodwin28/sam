@@ -38,6 +38,7 @@ output:
 
 
 ```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE)
 # clear memory
 rm(list=ls())
 options(max.print = 10000)
@@ -54,7 +55,7 @@ source(paste0(here::here(), "/monitoring/code/functions/config.R"))
 #devtools::load_all('~/Desktop/utility/')
 ```
 
-```{bash, eval=F, echo=F}
+```{bash run api, eval=F, echo=F, message=F}
 # bash script to export all the dataz
 commcare-export --output-format csv --output ../../data/raw/temp.zip --project nouna-pilots --query ../../tables/api_metadata.xlsx --username william.godwin@ucsf.edu --password Mordor2018! --since 2020-06-01
 ```
@@ -138,13 +139,13 @@ add_one <- function(x) x + 1
 # Overview
 Data exported from CommCare on **`r format(Sys.time(), '%d %B %Y')`**
 
-## Enrollment counts-total (Display `r DN`): `r  temp.table`
+### Enrollment counts-total (Display `r DN`): `r  temp.table`
 ```{r, echo=F}
 # display number
 DN <- add_one(DN)
 ```
 
-## Enrollment counts-past 7 days (Display `r DN`): `r  temp.table2`
+### Enrollment counts-past 7 days (Display `r DN`): `r  temp.table2`
 
 \vspace{2em}
 
@@ -616,6 +617,59 @@ p_female_study_muac
 
 Growth curves of individual participants over the study period. Each line represents one participant.
 
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+## Weight gain velocity (Display `r DN`)
+```{r, echo=F, warning=F}
+# number of csps
+overall_rowno <- pluck(df_list, "baseline") %>% distinct(csps_fra) %>% nrow + 1
+
+temp <- inner_join(
+  # calculate weight gain velocity
+  pluck(df_list, "anthro") %>%
+    select(childID, time_point, weight) %>% 
+    pivot_wider(names_from = time_point, values_from = weight, values_fn = list(weight = mean)) %>%
+    # convert to grams and adjust for baseline weight
+    mutate_at(vars(-matches("childID"), -matches("baseline")), list(dif = ~ ((. - baseline)*1000)/baseline)) %>%
+    select(childID, contains("dif")),
+  
+  # calculate total days between each visit
+  pluck(df_list, "anthro") %>%
+    select(childID, time_point, start_time) %>%
+    pivot_wider(names_from = time_point, values_from = start_time, values_fn = list(start_time = mean)) %>%
+    mutate_at(vars(-matches("childID"), -matches("baseline")), list(days = ~ as.integer(. - baseline))) %>%
+    select(childID, contains("days")),
+  
+  by="childID"
+) %>%
+  mutate(week_1_vel=week_1_dif/week_1_days,
+         week_2_vel=week_2_dif/week_2_days,
+         week_3_vel=week_3_dif/week_3_days)
+
+# tabulate the mean/SD velocity by CSPS
+bind_rows(
+  left_join(temp, 
+            pluck(df_list, "baseline") %>% distinct(childID, csps_fra),
+            by="childID") %>%
+  group_by(csps_fra) %>%
+  summarise(week_1=mean_sd(week_1_vel),
+            week_2=mean_sd(week_2_vel),
+            week_3=mean_sd(week_3_vel)),
+  temp %>%
+    summarise(week_1=mean_sd(week_1_vel),
+              week_2=mean_sd(week_2_vel),
+              week_3=mean_sd(week_3_vel)) %>%
+    mutate(csps_fra="Overall")
+) %>%
+  # table it
+  kable("latex", col.names = c("CSPS", "Week 1", "Week 2", "Week 3")) %>%
+  row_spec(c(0, overall_rowno), bold=T)
+```
+Table shows average (standard deviation) weight gain velocity in grams/kilogram/day with respect to baseline.
+
 
 ```{r, echo=F}
 # display number
@@ -1027,7 +1081,7 @@ pluck(df_list, "followup") %>%
 DN <- add_one(DN)
 ```
 
-## Total participants visiting health facility (Display `r DN`)
+### Total participants visiting health facility (Display `r DN`)
 ```{r, echo=F, warning=F, message=F}
 # tabulate visits and reason for visits
 pluck(df_list, "followup") %>%
@@ -1055,7 +1109,7 @@ pluck(df_list, "followup") %>%
 DN <- add_one(DN)
 ```
 
-## Total participants hospitalized (Display `r DN`)
+### Total participants hospitalized (Display `r DN`)
 ```{r, echo=F, warning=F, message=F}
 # tabulate visits and reason for visits
 pluck(df_list, "followup") %>%
@@ -1167,6 +1221,50 @@ check10.tab <- find_missing(df1 = "anthro", df2 = "eligibility", df_list = df_li
 DN <- add_one(DN)
 ```
 
+### Weight change between visits >1 kg (Display `r DN`)
+```{r, echo=F}
+# calculate weight change between each visit
+pluck(df_list, "anthro") %>%
+  select(childID, time_point, weight) %>%
+  pivot_wider(names_from = time_point, values_from = weight, values_fn = list(weight = mean)) %>%
+  mutate_at(vars(-matches("childID"), -matches("baseline")), list(dif = ~ round(. - baseline, digits = 2))) %>%
+  filter_at(vars(ends_with("dif")), any_vars( . > 1)) %>%
+  left_join(., 
+            pluck(df_list, "baseline") %>% distinct(childID, child_firstname, csps_fra),
+            by="childID") %>%
+  select(csps_fra, childID, child_firstname, baseline, ends_with("dif")) %>%
+  kable("latex", col.names = c("CSPS", "Child ID", "Name", "Baseline", "Week 1 change", "Week 2 change", "Week 3 change")) %>%
+  row_spec(0, bold=T)
+```
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+\vspace{2em}
+
+### Height change between visits >2 cm (Display `r DN`)
+```{r, echo=F}
+# calculate height change between each visit
+pluck(df_list, "anthro") %>%
+  select(childID, time_point, height) %>%
+  pivot_wider(names_from = time_point, values_from = height, values_fn = list(height = mean)) %>%
+  mutate_at(vars(-matches("childID"), -matches("baseline")), list(dif = ~ round(. - baseline, digits = 2))) %>%
+  filter_at(vars(ends_with("dif")), any_vars( . > 2)) %>%
+  left_join(., 
+            pluck(df_list, "baseline") %>% distinct(childID, child_firstname, csps_fra),
+            by="childID") %>%
+  select(csps_fra, childID, child_firstname, baseline, ends_with("dif")) %>%
+  kable("latex", col.names = c("CSPS", "Child ID", "Name", "Baseline", "Week 1 change", "Week 2 change", "Week 3 change")) %>%
+  row_spec(0, bold=T)
+```
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
 ## Duplicate IDs
 ### Child IDs (Display `r DN`)
 ```{r, echo=F, message=F, warning=F}
@@ -1206,6 +1304,11 @@ map_df(forms, find_duplicate_chids1, df_list) %>%
 ```{r, echo=F}
 # display number
 DN <- add_one(DN)
+```
+
+```{r, echo=F}
+#Number of children with diarrhea >14 days or blood/mucus in stool:
+#Number of children with respiratory rate >50 breaths/minute
 ```
 
 ## Anthro and Treatment weight discrepancy (>0.5 kg difference) (Display `r DN`)
