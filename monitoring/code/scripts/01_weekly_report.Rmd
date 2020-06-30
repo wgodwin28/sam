@@ -928,6 +928,11 @@ a <- pluck(df_list, "anthro") %>%
          ) %>%
   select(waz_zscore, muac, time_point, uniqID, signs_of_malnutrition, rec_comp, rec_muac, rec_whz, recovered, csps_fra)
 
+# store the ids of kids that actually have recovered
+rec_ids <- a %>% mutate(childID=substr(uniqID, 0, 7)) %>% 
+  filter(recovered==1) %>%
+  distinct(childID) %>% pull
+
 # add overall row and make table
 bind_rows( 
   a %>% 
@@ -942,6 +947,72 @@ bind_rows(
   row_spec(c(0, overall_rowno), bold=T)
 ```
 **Recovered** = WHZ >= -2 on two consecutive visits AND MUAC >=11.5 and no acute complications or edema over the past 7 days. Since 2 consecutive visits are required to prior to recovery, possible recovery visits only include visits from week 2 and on.
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+## Reported recoveries (Display `r DN`)
+```{r, echo=F, message=F, warning=F}
+# merge on the date from baseline
+rec_date <- left_join(
+  # list other reasons
+  pluck(df_list, "discharge") %>%
+    filter(reason_for_discharge=="recovered") %>%
+    select(childID, csps_fra, child_firstname, start_time),
+  
+  # baseline date
+  pluck(df_list, "baseline") %>%
+    select(childID, base_time=start_time),
+  by="childID"
+) %>%
+  mutate(week_rec = paste0("week_", as.numeric(difftime(start_time, base_time, units = "weeks")))) %>%
+  select(-start_time, -base_time)
+
+# the ids of children reportedly recovered
+ids <- pluck(df_list, "discharge") %>%
+    filter(reason_for_discharge=="recovered") %>%
+    distinct(childID) %>% pull
+
+# make table of muac at each time point
+left_join(
+  pluck(df_list, "anthro") %>%
+    select(childID, time_point, start_time, muac),
+  pluck(df_list, "discharge") %>%
+    filter(reason_for_discharge=="recovered") %>%
+    select(childID, rec_time=start_time),
+  by="childID"
+) %>%
+  filter(!is.na(rec_time)) %>%
+  mutate(week_num = as.numeric(difftime(rec_time, start_time, units = "days"))) %>% 
+  group_by(childID) %>%
+  arrange(childID, week_num) %>%
+  # grab just the most recent two muac measurements
+  slice_head(n = 2) %>%
+  mutate(week_num = if_else(week_num < 7, "recent_muac", "next_recent_muac")) %>%
+  bind_rows(., 
+            pluck(df_list, "anthro") %>%
+              filter(time_point=="baseline" & childID %in% ids) %>%
+              select(childID, time_point, start_time, muac)
+            ) %>%
+  mutate(week_num = if_else(is.na(week_num), time_point, week_num),
+         muac = round(muac*10)) %>%
+  select(-time_point, -rec_time, -start_time) %>%
+  pivot_wider(names_from = week_num, values_from = muac) %>%
+  # add on first name, csps, recovery date
+  left_join(
+    .,
+    rec_date,
+    by="childID"
+  ) %>%
+  select(childID, csps_fra, child_firstname, week_rec, everything()) %>%
+  mutate(recovered = if_else(childID %in% rec_ids, "Yes", "No")) %>%
+  kable("latex", col.names = c("Child ID", "CSPS", "Name", "Week recovered", "MUAC 1", "MUAC 2", "MUAC 0", "True recovery")) %>%
+  row_spec(c(0), bold=T)
+```
+
+**MUAC 1** = MUAC at time of recovery. **MUAC 2** = MUAC at week before recovery. **MUAC 0** = MUAC at baseline. **True recovery** = recovered according to study defintion.
 
 ```{r, echo=F}
 # display number
@@ -1021,6 +1092,16 @@ pluck(df_list, "discharge") %>%
 
 \vspace{2em}
 
+```{r, echo=F, message=F}
+# diplay discharge reason
+pluck(df_list, "discharge") %>%
+  select(csps_fra, childID, child_firstname, date_of_discharge, reason_for_discharge) %>%
+  kable("latex", col.names = c("CSPS", "Child ID", "Child first name", "Date of discharge", "Reason")) %>%
+  row_spec(0, bold=TRUE)
+```
+
+\vspace{2em}
+
 ```{r, echo=F}
 # display number
 DN <- add_one(DN)
@@ -1033,16 +1114,6 @@ pluck(df_list, "discharge") %>%
   filter(reason_for_discharge=="other") %>%
   select(childID, child_firstname, csps_fra, other_reason_for_discharge) %>%
   kable("latex", col.names = c("Child ID", "Child name", "CSPS", "Reason")) %>%
-  row_spec(0, bold=TRUE)
-```
-
-\vspace{2em}
-
-```{r, echo=F, message=F}
-# diplay discharge reason
-pluck(df_list, "discharge") %>%
-  select(csps_fra, childID, child_firstname, date_of_discharge, reason_for_discharge) %>%
-  kable("latex", col.names = c("CSPS", "Child ID", "Child first name", "Date of discharge", "Reason")) %>%
   row_spec(0, bold=TRUE)
 ```
 
