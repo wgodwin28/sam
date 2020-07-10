@@ -201,7 +201,7 @@ con_eligible <- pluck(df_list, "eligibility") %>% summarise(sum(eligible, na.rm 
 con_ineligble <- con_screened - con_eligible
 con_enrolled <- pluck(df_list, "eligibility") %>% summarise(sum(enrolled, na.rm = T)) %>% pull
 con_notenrolled <- con_eligible - con_enrolled
-con_treated <- pluck(df_list, "treatment") %>% distinct(childID) %>% nrow
+con_treated <- pluck(df_list, "treatment") %>% filter(admin_treatment==1) %>% distinct(childID) %>% nrow
 con_lostfollowup <- pluck(df_list, "followup") %>% 
   filter(time_point=="week_8" & (vital_status=="moved" | vital_status=="unknown")) %>%
   distinct(childID) %>% nrow
@@ -522,6 +522,22 @@ p_female_wfh_2
 DN <- add_one(DN)
 ```
 
+## Weight versus height cont'd (Display `r DN`)
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot wfh males: 3-5 years
+p_male_wfh_5
+```
+
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot wfh females: 3-5 years
+p_female_wfh_5
+```
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
 ## MUAC versus age (Display `r DN`)
 ```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
 #plot mfa males
@@ -647,7 +663,8 @@ temp <- inner_join(
 ) %>%
   mutate(week_1_vel=week_1_dif/week_1_days,
          week_2_vel=week_2_dif/week_2_days,
-         week_3_vel=week_3_dif/week_3_days)
+         week_3_vel=week_3_dif/week_3_days,
+         week_4_vel=week_4_dif/week_4_days)
 
 # tabulate the mean/SD velocity by CSPS
 bind_rows(
@@ -657,16 +674,22 @@ bind_rows(
   group_by(csps_fra) %>%
   summarise(week_1=mean_sd(week_1_vel),
             week_2=mean_sd(week_2_vel),
-            week_3=mean_sd(week_3_vel)),
+            week_3=mean_sd(week_3_vel),
+            week_4=mean_sd(week_4_vel)),
   temp %>%
     summarise(week_1=mean_sd(week_1_vel),
               week_2=mean_sd(week_2_vel),
-              week_3=mean_sd(week_3_vel)) %>%
+              week_3=mean_sd(week_3_vel),
+              week_4=mean_sd(week_4_vel)) %>%
     mutate(csps_fra="Overall")
 ) %>%
   # table it
-  kable("latex", col.names = c("CSPS", "Week 1", "Week 2", "Week 3")) %>%
+  kable("latex", col.names = c("CSPS", "Week 1", "Week 2", "Week 3", "Week 4")) %>%
   row_spec(c(0, overall_rowno), bold=T)
+
+if(Sys.Date() > as.Date("2020-07-12")){
+  message("ADD WEEK 5 VELOCITY")
+}
 ```
 Table shows average (standard deviation) weight gain velocity in grams/kilogram/day with respect to baseline.
 
@@ -685,9 +708,9 @@ overall_rowno <- pluck(df_list, "treatment") %>% distinct(csps_fra) %>% nrow + 1
 bind_rows(
   pluck(df_list, "treatment") %>%
     group_by(CSPS=csps_fra) %>%
-    summarise("Total treated"=sum(admin_treatment)),
+    summarise("Total treated"=sum(admin_treatment, na.rm = T)),
   pluck(df_list, "treatment") %>%
-    summarise("Total treated"=sum(admin_treatment)) %>%
+    summarise("Total treated"=sum(admin_treatment, na.rm = T)) %>%
     mutate(CSPS="Overall")
 ) %>%
   kable("latex") %>%
@@ -735,7 +758,6 @@ bind_rows(
   row_spec(c(0, overall_rowno), bold=T)
 ```
 **HB Test** = "Total hemoglobin tests performed"
-
 
 ```{r, echo=F, eval=F, message=F, warning=F}
 ## Hemoglobin test (Display 14)
@@ -827,15 +849,17 @@ df_dis <- pluck(df_list, "discharge") %>%
 discharge_ids <- pluck(df_list, "discharge") %>% distinct(childID) %>% pull
 df_5to7 <- pluck(df_list, "eligibility") %>%
   filter(enrolled==1 & childID %in% setdiff(childID, discharge_ids)) %>%
-  select(childID, enroll_date=start_time) %>%
+  select(childID, enroll_date=start_time, csps_fra, child_firstname) %>%
   mutate("week_5"=if_else(Sys.Date()-enroll_date>=35, 1, 0),
          "week_6"=if_else(Sys.Date()-enroll_date>=42, 1, 0),
          "week_7"=if_else(Sys.Date()-enroll_date>=49, 1, 0)) %>%
-  gather(key = time_point, value = expected, -enroll_date, -childID) %>%
+  gather(key = time_point, value = expected, -enroll_date, -childID, -csps_fra, -child_firstname) %>%
   left_join(., 
-            pluck(df_list, "followup") %>% filter(!duplicated(uniqID)), 
+            pluck(df_list, "followup") %>% 
+              filter(!duplicated(uniqID)) %>%
+              select(id, childID, time_point), 
             by=c("childID", "time_point")) %>%
-  select(childID, enroll_date, time_point, expected, id)
+  select(childID, enroll_date, time_point, expected, id, csps_fra, child_firstname)
 
 # expected to actual ratio
 df_followup <- pluck(df_list, "eligibility") %>%
@@ -867,7 +891,8 @@ df_followup %>%
   mutate(missing=ltfu+(expected-actual)) %>%
   left_join(., df_dis, by="time_point") %>%
   mutate_if(is.double, function(x) ifelse(is.na(x), 0, x)) %>%
-  kable("latex", col.names = c("Timepoint", "Expected", "Actual", "Coverage", "LTFU", "Missing forms", "N discharged")) %>%
+  kable("latex", col.names = c("Timepoint", "Expected", "Actual", 
+                               "Coverage", "LTFU", "Missing forms", "N discharged")) %>%
   row_spec(c(0), bold=T)
 ```
 **LTFU** = lost to follow-up (vital status is moved/unknown).
@@ -888,10 +913,15 @@ df_followup %>%
   filter(expected==1 & is.na(id)) %>%
   arrange(csps_fra, childID, time_point) %>%
   select(csps_fra, childID, time_point, child_firstname, enroll_date) %>%
-  kable("latex", col.names = c("CSPS", "Child ID", "Time point", "Child name", "Enroll date")) %>%
-  row_spec(c(0), bold=T) # %>%
-  # collapse_rows(1:2, latex_hline = 'custom', custom_latex_hline = 1:2,
-  #               row_group_label_position = 'identity')
+  mutate(weeks = weeks(substr(time_point, 6, 6)),
+         follow_update = weeks + enroll_date,
+         days_late = as.Date(date, "%d%b%Y") - follow_update) %>%
+  select(-weeks, -follow_update) %>% 
+  arrange(csps_fra, -days_late) %>%
+  kable("latex", col.names = c("CSPS", "Child ID", "Time point", "Child name", "Enroll date", "Days late")) %>%
+  row_spec(c(0), bold=T) %>%
+  collapse_rows(1:2, latex_hline = 'custom', custom_latex_hline = 1:2,
+                row_group_label_position = 'identity')
 ```
 
 ```{r, echo=F}
@@ -907,26 +937,33 @@ overall_rowno <- pluck(df_list, "anthro") %>%
   distinct(csps_fra) %>% nrow + 1
 
 # create indicator variables whether waz and muac have remained below threshold for 2 consecutive weeks
-a <- pluck(df_list, "anthro") %>%
-  filter(!duplicated(uniqID) & (time_point!="baseline" & time_point!="week_1")) %>%
+a <- pluck(df_list, "eligibility") %>%
+  mutate(rec_enroll =
+           case_when(
+             whz_zscore_ind==1 & muac_under115==1 ~ 3,
+             muac_under115==1 ~ 1,
+             whz_zscore_ind==1 ~ 2
+           )
+  ) %>% 
+  select(rec_enroll, childID) %>%
+  right_join(., pluck(df_list, "anthro") %>%
+                 filter(time_point!="baseline" & time_point!="week_1"),
+             by="childID") %>%
   arrange(childID, time_point) %>%
-  mutate(rec_whz=ifelse(waz_zscore>= -2 & 
-                          lag(waz_zscore, order_by = c(uniqID))>= -2, 
-                        1, 0),
-         rec_muac=ifelse(muac>= 11.5 & 
-                           lag(muac, order_by = c(uniqID))>= 11.5, 
-                         1, 0),
-         rec_comp=ifelse(grepl("aucun", signs_of_malnutrition), 
-                         1, 0),
-         recovered=ifelse(
-            rec_whz==1 &
-            rec_muac==1 &
-            rec_comp==1 &
-            # must exlcude these false postives bc lag doesn't work for kids with just baseline interview
-            time_point!="baseline", 
-            1, 0)
+  mutate(recovered = 
+           case_when(
+             #if child recovers based on MUAC
+             rec_enroll==1 & muac >= 12.5 & lag(muac, order_by = c(uniqID))>= 12.5 ~ 1,
+             # if child recovers based on WHZ
+             rec_enroll==2 & whz_zscore >= -2 & lag(whz_zscore, order_by = c(uniqID))>= -2 ~ 1,
+             # if child recovers based on MUAC and WHZ
+             rec_enroll==3 & muac >= 12.5 & lag(muac, order_by = c(uniqID))>= 12.5 &
+               whz_zscore >= -2 & lag(whz_zscore, order_by = c(uniqID))>= -2 ~ 1,
+             # else they didn't recover
+             TRUE ~ 0
+           )
          ) %>%
-  select(waz_zscore, muac, time_point, uniqID, signs_of_malnutrition, rec_comp, rec_muac, rec_whz, recovered, csps_fra)
+  select(waz_zscore, muac, time_point, uniqID, signs_of_malnutrition, recovered, csps_fra)
 
 # store the ids of kids that actually have recovered
 rec_ids <- a %>% mutate(childID=substr(uniqID, 0, 7)) %>% 
@@ -934,11 +971,16 @@ rec_ids <- a %>% mutate(childID=substr(uniqID, 0, 7)) %>%
   distinct(childID) %>% pull
 
 # add overall row and make table
-bind_rows( 
-  a %>% 
+bind_rows(
+  # count the unique kids (IDs) that have recovered-filter out duplicates by visit
+  a %>%
+    mutate(childID=substr(uniqID, 0, 7)) %>%
+    filter(!duplicated(childID)) %>%
     group_by(csps_fra) %>%
     summarise(visits=n(), recovered=sum(recovered)),
   a %>%
+    mutate(childID=substr(uniqID, 0, 7)) %>%
+    filter(!duplicated(childID)) %>%
     summarise(visits=n(), recovered=sum(recovered)) %>%
     mutate(csps_fra="Overall")
 ) %>%
@@ -946,7 +988,7 @@ bind_rows(
   kable("latex", col.names = c("CSPS", "Visits", "Recovered", "Recovery fraction")) %>%
   row_spec(c(0, overall_rowno), bold=T)
 ```
-**Recovered** = WHZ >= -2 on two consecutive visits AND MUAC >=11.5 and no acute complications or edema over the past 7 days. Since 2 consecutive visits are required to prior to recovery, possible recovery visits only include visits from week 2 and on.
+**Recovered** = dependent on the enrollment reason for each child. A child was enrolled for MUAC < 115 mm must report MUAC >= 125 mm for 2 consecutive weeks. A child enrolled for WHZ < -3 must have WHZ >= -2 for 2 consecutive weeks. A child enrolled for both MUAC < 115 mm and WHZ < -3 must attain MUAC >= 125 mm AND WHZ >= -2 for 2 consecutive weeks
 
 ```{r, echo=F}
 # display number
@@ -967,7 +1009,7 @@ rec_date <- left_join(
     select(childID, base_time=start_time),
   by="childID"
 ) %>%
-  mutate(week_rec = paste0("week_", as.numeric(difftime(start_time, base_time, units = "weeks")))) %>%
+  mutate(week_rec = paste0("week_", round(as.numeric(difftime(start_time, base_time, units = "weeks"))))) %>%
   select(-start_time, -base_time)
 
 # the ids of children reportedly recovered
@@ -985,19 +1027,20 @@ left_join(
   by="childID"
 ) %>%
   filter(!is.na(rec_time)) %>%
-  mutate(week_num = as.numeric(difftime(rec_time, start_time, units = "days"))) %>% 
-  group_by(childID) %>%
+  mutate(week_num = as.numeric(difftime(rec_time, start_time, units = "days"))) %>%
   arrange(childID, week_num) %>%
+  group_by(childID) %>%
   # grab just the most recent two muac measurements
   slice_head(n = 2) %>%
   mutate(week_num = if_else(week_num < 7, "recent_muac", "next_recent_muac")) %>%
+  # bind on the baseline muac
   bind_rows(., 
             pluck(df_list, "anthro") %>%
               filter(time_point=="baseline" & childID %in% ids) %>%
               select(childID, time_point, start_time, muac)
             ) %>%
   mutate(week_num = if_else(is.na(week_num), time_point, week_num),
-         muac = round(muac*10)) %>%
+         muac = round(muac)) %>%
   select(-time_point, -rec_time, -start_time) %>%
   pivot_wider(names_from = week_num, values_from = muac) %>%
   # add on first name, csps, recovery date
@@ -1008,7 +1051,8 @@ left_join(
   ) %>%
   select(childID, csps_fra, child_firstname, week_rec, everything()) %>%
   mutate(recovered = if_else(childID %in% rec_ids, "Yes", "No")) %>%
-  kable("latex", col.names = c("Child ID", "CSPS", "Name", "Week recovered", "MUAC 1", "MUAC 2", "MUAC 0", "True recovery")) %>%
+  kable("latex", col.names = c("Child ID", "CSPS", "Name", "Week recovered",
+                               "MUAC 1", "MUAC 2", "MUAC 0", "True recovery")) %>%
   row_spec(c(0), bold=T)
 ```
 
@@ -1298,13 +1342,16 @@ DN <- add_one(DN)
 pluck(df_list, "anthro") %>%
   select(childID, time_point, weight) %>%
   pivot_wider(names_from = time_point, values_from = weight, values_fn = list(weight = mean)) %>%
+  mutate(baseline = round(baseline, 2)) %>%
   mutate_at(vars(-matches("childID"), -matches("baseline")), list(dif = ~ round(. - baseline, digits = 2))) %>%
   filter_at(vars(ends_with("dif")), any_vars( . > 1)) %>%
   left_join(., 
             pluck(df_list, "baseline") %>% distinct(childID, child_firstname, csps_fra),
             by="childID") %>%
   select(csps_fra, childID, child_firstname, baseline, ends_with("dif")) %>%
-  kable("latex", col.names = c("CSPS", "Child ID", "Name", "Baseline", "Week 1 change", "Week 2 change", "Week 3 change")) %>%
+  kable("latex", col.names = c("CSPS", "Child ID", "Name", "Baseline", "Week 1 change",
+                               "Week 2 change", "Week 3 change", "Week 4 change")) %>%
+  column_spec(1:8, width = "1.7cm") %>%
   row_spec(0, bold=T)
 ```
 
@@ -1321,13 +1368,16 @@ DN <- add_one(DN)
 pluck(df_list, "anthro") %>%
   select(childID, time_point, height) %>%
   pivot_wider(names_from = time_point, values_from = height, values_fn = list(height = mean)) %>%
+  mutate(baseline = round(baseline, 2)) %>%
   mutate_at(vars(-matches("childID"), -matches("baseline")), list(dif = ~ round(. - baseline, digits = 2))) %>%
   filter_at(vars(ends_with("dif")), any_vars( . > 2)) %>%
   left_join(., 
             pluck(df_list, "baseline") %>% distinct(childID, child_firstname, csps_fra),
             by="childID") %>%
   select(csps_fra, childID, child_firstname, baseline, ends_with("dif")) %>%
-  kable("latex", col.names = c("CSPS", "Child ID", "Name", "Baseline", "Week 1 change", "Week 2 change", "Week 3 change")) %>%
+  kable("latex", col.names = c("CSPS", "Child ID", "Name", "Baseline", "Week 1 change", 
+                               "Week 2 change", "Week 3 change", "Week 4 change")) %>%
+  column_spec(1:8, width = "1.7cm") %>%
   row_spec(0, bold=T)
 ```
 

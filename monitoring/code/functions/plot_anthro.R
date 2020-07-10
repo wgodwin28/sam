@@ -41,14 +41,14 @@ chartdat_wfh_2 <- data.frame(SD = rep(sd_labels, each = ht_max-ht_min+1),
                                who_centile2value(x = ht_min:ht_max, p = p, x_var = "lencm", y_var = "wtkg", sex = "Female"))))
 
 #weight for height 3-5 years
-# ht_min <- min(pluck(df_list, "anthro") %>% filter(ageInDays >= 730) %>% select(height)) %>% round() - 1
-# ht_max <- max(pluck(df_list, "anthro") %>% filter(ageInDays >= 730) %>% select(height)) %>% round() + 1
-# chartdat_wfh_5 <- data.frame(SD = rep(sd_labels, each = ht_max-ht_min+1),
-#                              height = rep(ht_min:ht_max, times = 7),
-#                              wfh_male = unlist(map(p_frmSD, function(p) 
-#                                who_centile2value(x = ht_min:ht_max, p = p, x_var = "htcm", y_var = "wtkg", sex = "Male"))),
-#                              wfh_female = unlist(map(p_frmSD, function(p) 
-#                                who_centile2value(x = ht_min:ht_max, p = p, x_var = "htcm", y_var = "wtkg", sex = "Female"))))
+ht_min <- min(pluck(df_list, "anthro") %>% filter(ageInDays >= 730) %>% select(height)) %>% round() - 1
+ht_max <- max(pluck(df_list, "anthro") %>% filter(ageInDays >= 730) %>% select(height)) %>% round() + 1
+chartdat_wfh_5 <- data.frame(SD = rep(sd_labels, each = ht_max-ht_min+1),
+                             height = rep(ht_min:ht_max, times = 7),
+                             wfh_male = unlist(map(p_frmSD, function(p)
+                               who_centile2value(x = ht_min:ht_max, p = p, x_var = "htcm", y_var = "wtkg", sex = "Male"))),
+                             wfh_female = unlist(map(p_frmSD, function(p)
+                               who_centile2value(x = ht_min:ht_max, p = p, x_var = "htcm", y_var = "wtkg", sex = "Female"))))
 
 ##check on zscores outside of -6 and 6
 pluck(df_list, "anthro") %<>%
@@ -119,7 +119,6 @@ p_female_hfa <- pluck(df_list, "anthro") %>%
   scale_color_discrete(name="WHO Standard") +
   guides(color = guide_legend(reverse = TRUE))
 
-
 ## Height Versus Weight ############################
 #scatter height versus weight (kg) 0-2 years
 p_male_wfh_2 <- pluck(df_list, "anthro") %>%
@@ -142,6 +141,32 @@ p_female_wfh_2 <- pluck(df_list, "anthro") %>%
   geom_point() +
   theme_bw() +
   ggtitle("Females 0-2 years") +
+  xlab("Height (cm) at enrollment") +
+  ylab("Weight (kg) at enrollment") +
+  scale_color_discrete(name="WHO Standard") +
+  guides(color = guide_legend(reverse = TRUE))
+
+#scatter height versus weight (kg) 3-5 years
+p_male_wfh_5 <- pluck(df_list, "anthro") %>%
+  filter(sex=="male" & height>0 & ageInDays >= 730 & time_point=="baseline") %>%
+  ggplot(aes(height, weight)) +
+  geom_line(data=chartdat_wfh_5, aes(height, wfh_male, color=SD)) +
+  geom_point() +
+  theme_bw() +
+  ggtitle("Males 3-5 years") +
+  xlab("Height (cm) at enrollment") +
+  ylab("Weight (kg) at enrollment") +
+  scale_color_discrete(name="WHO Standard") +
+  guides(color = guide_legend(reverse = TRUE))
+
+#height versus weight 3-5 years
+p_female_wfh_5 <- pluck(df_list, "anthro") %>%
+  filter(sex=="female" & height>0 & weight>0 & ageInDays >= 730 & time_point=="baseline") %>%
+  ggplot(aes(height, weight)) +
+  geom_line(data=chartdat_wfh_5, aes(height, wfh_female, color=SD)) +
+  geom_point() +
+  theme_bw() +
+  ggtitle("Females 3-5 years") +
   xlab("Height (cm) at enrollment") +
   ylab("Weight (kg) at enrollment") +
   scale_color_discrete(name="WHO Standard") +

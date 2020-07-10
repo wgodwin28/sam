@@ -1,0 +1,525 @@
+---
+title: "SAM DSMC Report"
+subtitle:
+- <h1><u>CONFIDENTIAL-DO NOT DISSEMINATE</u></h1>
+author: "Will Godwin"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+geometry: margin=2cm
+header-includes:
+- \usepackage{booktabs}
+- \usepackage{longtable}
+- \usepackage{array}
+- \usepackage{multirow}
+- \usepackage{wrapfig}
+- \usepackage{float}
+- \usepackage{colortbl}
+- \usepackage{pdflscape}
+- \usepackage{tabu}
+- \usepackage{threeparttable}
+- \usepackage{threeparttablex}
+- \usepackage[normalem]{ulem}
+- \usepackage{makecell}
+- \usepackage{xcolor}
+knit: (function(inputFile, encoding) { rmarkdown::render(inputFile, encoding = encoding, output_file = paste0(substr(inputFile,1,nchar(inputFile)-4), "_", Sys.Date(),'.pdf')) })
+always_allow_html: yes
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    template: default.latex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE)
+# clear memory
+rm(list=ls())
+options(max.print = 10000)
+date <- format(Sys.Date(), "%d%b%Y")
+date <- "01Jul2020"
+
+#disable scientific notation
+options(scipen = 999)
+
+# configure directories, load libraries and base functions
+source(paste0(here::here(), "/monitoring/code/functions/config.R"))
+
+#load utility package full of necessary functions
+#devtools::load_all('~/Desktop/utility/')
+```
+
+```{bash run api, eval=F, echo=F, message=F}
+# bash script to export all the dataz
+commcare-export --output-format csv --output ../../data/raw/temp.zip --project nouna-pilots --query ../../tables/api_metadata.xlsx --username william.godwin@ucsf.edu --password Mordor2018! --since 2020-06-01
+```
+
+```{r, echo=F}
+# unzip zip file
+# date <- format(Sys.Date(), "%d%b%Y")
+# zipF <- paste0(data_dir, "temp.zip")
+# unzip(zipF, exdir=paste0(data_dir, date))
+```
+
+```{r read data, include=F}
+source(paste0(code_dir, "read_data.R"), local = T)
+```
+
+```{r overview, include=F}
+# number of csps
+overall_rowno <- pluck(df_list, "eligibility") %>% distinct(csps_fra) %>% nrow + 1
+
+# eligibility criteria
+el_crit <- c("abx_use", "clin_comp", "inpatient", "edema", "growth_faltering_illness", 
+             "prior__admission", "feeding", "Study_area", "available", "consent")
+
+# create screened indicator
+pluck(df_list, "eligibility") %<>%
+  mutate(screened = if_else(!duplicated(childID) | is.na(childID), 1, 0),
+         eligible = if_else(str_detect(inclusion_criteria, el_crit) & (muac_under115==1 | whz_zscore_ind==1), 1, 0),
+         refused = if_else(eligible==1 & is.na(childID), 1, 0), # need to edit this once we know what refusal looks like
+         enrolled = if_else(!is.na(childID), 1, 0)) #,
+         #excluded_reasons = grep(inclusion_criteria, paste(el_crit, collapse = "|"), value = T, invert = T))
+    
+# tabulate the indicators and create table
+temp.table <- 
+  bind_rows(
+    pluck(df_list, "eligibility") %>%
+    group_by(CSPS=csps_fra) %>%
+    summarise(Screened = sum(screened, na.rm = T),
+              Eligible = sum(eligible, na.rm = T),
+              Refused = sum(refused, na.rm = T),
+              Enrolled = sum(enrolled, na.rm = T)),
+    pluck(df_list, "eligibility") %>%
+    summarise(Screened = sum(screened, na.rm = T),
+              Eligible = sum(eligible, na.rm = T),
+              Refused = sum(refused, na.rm = T),
+              Enrolled = sum(enrolled, na.rm = T)) %>%
+    mutate(CSPS="Overall")
+  ) %>%
+  kable("latex", align = "c") %>%
+  row_spec(c(0, overall_rowno), bold=T)
+
+# tabulate the indicators for past 7 days and create table
+temp.table2 <- 
+  bind_rows(
+    pluck(df_list, "eligibility") %>%
+    filter(as.Date(date, format = "%d%b%Y") - interview_date < 7) %>%
+    group_by(CSPS=csps_fra) %>%
+    summarise(Screened = sum(screened, na.rm = T),
+              Eligible = sum(eligible, na.rm = T),
+              Refused = sum(refused, na.rm = T),
+              Enrolled = sum(enrolled, na.rm = T)),
+    pluck(df_list, "eligibility") %>%
+    filter(as.Date(date, format = "%d%b%Y") - interview_date < 7) %>%
+    summarise(Screened = sum(screened, na.rm = T),
+              Eligible = sum(eligible, na.rm = T),
+              Refused = sum(refused, na.rm = T),
+              Enrolled = sum(enrolled, na.rm = T)) %>%
+    mutate(CSPS="Overall")
+  ) %>%
+  kable("latex", align = "c") %>%
+  row_spec(c(0), bold=T)
+
+# display number
+DN <- 1
+
+# add one function
+add_one <- function(x) x + 1
+```
+
+\newpage
+
+# Overview
+Data cutoff **`r format(as.Date(date, format="%d%b%Y"), '%B %d, %Y')`**
+
+### Enrollment counts-total (Display `r DN`): `r  temp.table`
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+### Enrollment counts-past 7 days (Display `r DN`): `r  temp.table2`
+
+\vspace{2em}
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+## Enrollment over time (Display `r DN`)
+```{r time series enrollment plot, echo=F, warning=F, message=F}
+#daily enrollments over time
+total_perday <- pluck(df_list, "eligibility") %>%
+  group_by(interview_date) %>%
+  summarise(Screened = sum(screened), 
+            Eligible = sum(eligible),
+            Enrolled = sum(enrolled))
+  
+#Melt to long for ggplot
+total_perday %<>%
+  gather(key = "Key", value = "Value", Screened, Eligible, Enrolled) %>%
+  group_by(Key) %>%
+  mutate(total=cumsum(Value)) %>%
+  arrange(Key, interview_date)
+
+#plot
+total_perday$Step <- factor(total_perday$Key, levels=c("Screened", "Eligible", "Enrolled"))
+ggplot(total_perday, aes(x = interview_date, y = as.integer(total), color = Step)) +  
+  scale_color_brewer(palette="Set1", name="") +
+  geom_line(alpha=.5) +
+  geom_point() +
+  #geom_text(aes(label=count), vjust=-0.3, size=3.5) +
+  xlab("Date") +
+  ylab("Total participants") +
+  scale_y_continuous(breaks= pretty_breaks()) +
+  scale_x_date(labels = date_format("%m/%d"), breaks = date_breaks("3 day")) +
+  theme(legend.title = element_blank()) +
+  #scale_color_discrete(name="") +
+  theme_bw()
+```
+
+All eligible children have been enrolled thus far.
+
+\vspace{2em}
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+## CONSORT Diagram (Display `r DN`)
+```{r consort diagram, echo=F, warning=F}
+# Values
+con_screened <- pluck(df_list, "eligibility") %>% summarise(sum(screened, na.rm = T)) %>% pull
+con_eligible <- pluck(df_list, "eligibility") %>% summarise(sum(eligible, na.rm = T)) %>% pull
+con_ineligble <- con_screened - con_eligible
+con_enrolled <- pluck(df_list, "eligibility") %>% summarise(sum(enrolled, na.rm = T)) %>% pull
+con_notenrolled <- con_eligible - con_enrolled
+con_treated <- pluck(df_list, "treatment") %>% filter(admin_treatment==1) %>% distinct(childID) %>% nrow
+con_lostfollowup <- pluck(df_list, "followup") %>% 
+  filter(time_point=="week_8" & (vital_status=="moved" | vital_status=="unknown")) %>%
+  distinct(childID) %>% nrow
+con_reach6mo <- pluck(df_list, "followup") %>% 
+  filter(time_point=="week_8" & vital_status=="alive") %>%
+  distinct(childID) %>% nrow
+values <- c(con_screened, con_ineligble, con_eligible, con_notenrolled,
+            con_enrolled, con_lostfollowup, con_reach6mo)
+#values <- c(210, 10, 200, 100, 100, 10, 60)
+
+# Text Labels-must be same length as values above
+text <- c("Assessed for\neligibility",
+          "Ineligible",
+          "Eligible",
+          "Refused/\nNot enrolled",
+          "Randomized",
+          "Lost to Follow-up",
+          "Reached 8-week \noutcome")
+
+#generate data for flowchart
+consort_data <- paste0(text, "(N=", values, ")")
+#substitute(paste0(text, "(", italic("N="), values, ")"))
+#consort_data <- paste0(text, "(", substitute(paste0(italic("N="))), values, ")")
+generate_consort(consort_data)
+```
+
+**Lost to Follow-up**-total participants with "moved" or "unknown" vital status at week 8.
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+\newpage
+
+## Reasons ineligible (Display `r DN`)
+```{r, echo=F, message=F, warning=F}
+# identify each reason for exclusion
+pluck(df_list, "eligibility") %<>%
+  mutate(exclz_abx_use = if_else(str_detect(inclusion_criteria, "abx_use"), 0, 1),
+         exclz_clin_comp = if_else(str_detect(inclusion_criteria, "clin_comp"), 0, 1),
+         exclz_inpatient = if_else(str_detect(inclusion_criteria, "inpatient"), 0, 1),
+         exclz_edema = if_else(str_detect(inclusion_criteria, "edema"), 0, 1),
+         exclz_growth_faltering_illness = if_else(str_detect(inclusion_criteria, "growth_faltering_illness"), 0, 1),
+         exclz_prior__admission = if_else(str_detect(inclusion_criteria, "prior__admission"), 0, 1),
+         exclz_feeding = if_else(str_detect(inclusion_criteria, "feeding"), 0, 1),
+         exclz_Study_area = if_else(str_detect(inclusion_criteria, "Study_area"), 0, 1),
+         exclz_available = if_else(str_detect(inclusion_criteria, "available"), 0, 1),
+         exclz_consent = if_else(str_detect(inclusion_criteria, "consent"), 0, 1))
+
+# tabulate
+df_reasons <-
+  bind_rows(
+    pluck(df_list, "eligibility") %>%
+      group_by(csps_fra) %>%
+      summarise_at(vars(contains("exclz")), sum),
+    pluck(df_list, "eligibility") %>%
+      summarise_at(vars(contains("exclz")), sum) %>%
+      mutate(csps_fra="Overall")
+  )
+
+# split data into 2 bc too wide for one table
+df_reasons %>%
+  select(csps_fra, exclz_abx_use, exclz_clin_comp, exclz_inpatient, 
+         exclz_edema, exclz_growth_faltering_illness) %>%
+  kable("latex", align = "c", col.names = c("CSPS", "Antibiotic use", "Clinical comp", 
+                                            "Inpatient", "Edema", "GFI")) %>%
+  row_spec(c(0, overall_rowno), bold=T)
+
+# second half of table
+df_reasons %>%
+  select(csps_fra, exclz_prior__admission, exclz_feeding, 
+         exclz_Study_area, exclz_available, exclz_consent) %>%
+  kable("latex", align = "c", col.names = c("CSPS", "Prior admission",
+                                            "Feeding", "Study area", 
+                                            "Unavailable", "Refused")) %>%
+  row_spec(c(0, overall_rowno), bold=T)
+```
+
+**Antibiotic use** = antibiotic use in past 7 days. **Clinical comp** = complications requiring antibiotic use. **Inpatient** = complications requiring inpatient treatment. **GFI** = Growth faltering illness. **Edema** = nutritional edema. **Prior admission** = prior admission to nutritional program in past 3 months. **Feeding** = insufficient appetite according to a feeding test with ready-to-use therapeutic food. **Study area** = child does not live in study area. **Unavailable** = unaavailable for next 8 weeks. **Refused** = child's guardian refused to consent to enroll in study.
+
+\vspace{2em}
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+# Baseline characteristics (Display `r DN`)
+```{r, echo=F, message=F, warning=F}
+# build anthro plots
+make_plotly <- F
+source(paste0(code_dir, "plot_anthro.R"), local = T)
+
+# produce formatted mean and standard deviation of vector
+mean_sd <- function(x){
+  # mean
+  m <- mean(x, na.rm = T) %>% round(1)
+  
+  # standard deviation
+  s <- sd(x, na.rm = T) %>% round(1)
+  
+  # return formatted product
+  return(paste0(m, " (", s, ")"))
+}
+
+# function that produces sum and percent of binary vector input
+sum_n_percent <- function(x){
+  s <- sum(x, na.rm = T)
+  
+  per <- percent(sum(x, na.rm = T)/length(x))
+  
+  return(paste0(s, " (", per, ")"))
+}
+
+# child and mother's age
+age <- pluck(df_list, "baseline") %>%
+  mutate(age_months = as.integer(age_months),
+         age_months = ifelse(Dob_known==1, difftime(Sys.Date(), child_dob)/30, age_months)) %>%
+  summarize("Child age (months), mean (SD)" = mean_sd(age_months),
+            "Mother's age (years), mean (SD)" = mean_sd(mothers_age)) %>%
+  pivot_longer(everything()) %>%
+  select(col1=name, col2=value)
+
+# calculate percent female
+female <- pluck(df_list, "baseline") %>%
+  mutate(sex2=if_else(sex=="male", 0, 1),
+         col1="Female sex, N (%)") %>%
+  group_by(col1) %>%
+  summarize(col2=sum_n_percent(sex2))
+
+# calculate percent currently breastfeeding
+breastfed <- pluck(df_list, "baseline") %>%
+  mutate(breast_fed=case_when(
+    breastfeed == 1 ~ 1,
+    breastfeed == 2 ~ 0
+  ),
+    col1="Breastfeeding, N (%)") %>%
+  group_by(col1) %>%
+  summarize(col2=sum_n_percent(breast_fed))
+
+# calculate percent enrolled based on MUAC vs WHZ
+anthro_enroll <- pluck(df_list, "eligibility") %>%
+  mutate(low_muac = ifelse(muac_under115==1 & whz_zscore_ind==0, 1, 0),
+         low_whz = ifelse(muac_under115==0 & whz_zscore_ind==1, 1, 0),
+         low_both = ifelse(muac_under115==1 & whz_zscore_ind==1, 1, 0)) %>%
+  summarise("Low MUAC only, N (%)" = sum_n_percent(low_muac),
+            "Low WHZ only, N (%)" = sum_n_percent(low_whz),
+            "Low MUAC + WHZ, N (%)" = sum_n_percent(low_both)) %>%
+  pivot_longer(everything()) %>%
+  select(col1=name, col2=value)
+
+# calculate anthro measurements
+anthro <- pluck(df_list, "anthro") %>%
+  filter(time_point=="baseline") %>%
+  summarise("MUAC, mean (SD)" = mean_sd(muac),
+            "WHZ, mean (SD)" = mean_sd(whz_zscore),
+            "WAZ, mean (SD)" = mean_sd(waz_zscore),
+            "HAZ, mean (SD)" = mean_sd(haz_zscore)) %>%
+  pivot_longer(everything()) %>%
+  select(col1=name, col2=value)
+
+# enrollment criteria row
+enroll_row <- data.frame(col1="Enrollment criteria", col2=" ")
+
+# bind together
+bind_rows(age,
+          female,
+          breastfed,
+          anthro,
+          enroll_row,
+          anthro_enroll) %>%
+  kable("latex", col.names = c(" ", " ")) %>%
+  row_spec(9, bold = T)
+```
+
+**Breastfeeding** = currently breastfeeding. **Low MUAC only** = enrolled due to MUAC < 11.5 cm. **Low WHZ only** = enrolled due to WHZ < -3. **Low MUAC + WHZ** = enrolled due to MUAC < 11.5 cm and WHZ < -3.
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+## Age Distribution (Display `r DN`)
+```{r, echo=F, message=F}
+#age histogram
+pluck(df_list, "anthro") %>%
+  filter(time_point=="baseline") %>%
+  mutate(age_months = ifelse(Dob_known==1, difftime(Sys.Date(), child_dob)/30, age_months)) %>%
+  ggplot(aes(age_months)) +
+  geom_histogram() +
+  theme_bw() +
+  scale_x_continuous(breaks = seq(0,60,6)) +
+  xlab("Age (Months)") +
+  ylab("Count")
+```
+
+Histogram distribution of the age at enrollment.
+
+\vspace{1em}
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+# Baseline anthropometry (Display `r DN`)
+```{r, echo=F, message=F}
+# make anthro indicators
+pluck(df_list, "anthro") %<>%
+  mutate(whz3=if_else(whz_zscore < -3, 1, 0),
+         muac11=if_else(muac < 11.5, 1, 0),
+         waz3=if_else(waz_zscore < -3, 1, 0),
+         haz3=if_else(haz_zscore < -3, 1, 0))
+
+# number of csps
+overall_rowno <- pluck(df_list, "anthro") %>% distinct(csps_fra) %>% nrow + 1
+
+#tabulate and table
+bind_rows(
+  pluck(df_list, "anthro") %>%
+    filter(time_point=="baseline") %>%
+    group_by(csps_fra) %>%
+    summarise(sum_n_percent(whz3),
+              sum_n_percent(muac11),
+              sum_n_percent(waz3),
+              sum_n_percent(haz3)),
+  pluck(df_list, "anthro") %>%
+    filter(time_point=="baseline") %>%
+    summarise(sum_n_percent(whz3),
+              sum_n_percent(muac11),
+              sum_n_percent(waz3),
+              sum_n_percent(haz3)) %>%
+    mutate(csps_fra="Overall")
+  ) %>%
+  kable("latex", col.names = c("CSPS", "WHZ < -3", "MUAC < 11.5", "WAZ < -3",
+                               "HAZ < -3")) %>%
+  row_spec(c(0, overall_rowno), bold=T)
+```
+Total and percentage of participants that report WAZ < -3 SD (standard deviation), MUAC < -11.5 cm, WHZ < -3 SD, and HAZ < -3 SD.
+
+\newpage
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+## Weight versus age (Display `r DN`)
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot wfa males
+p_male_wfa
+```
+
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot wfa females
+p_female_wfa
+```
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+## Height versus age (Display `r DN`)
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot hfa males
+p_male_hfa
+```
+
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot hfa females
+p_female_hfa
+```
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+## Weight versus height (Display `r DN`)
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot wfh males: 0-2 years
+p_male_wfh_2
+```
+
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot wfh females: 0-2 years
+p_female_wfh_2
+```
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+## Weight versus height cont'd (Display `r DN`)
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot wfh males: 3-5 years
+p_male_wfh_5
+```
+
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot wfh females: 3-5 years
+p_female_wfh_5
+```
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+## MUAC versus age (Display `r DN`)
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot mfa males
+p_male_mfa
+```
+
+```{r, echo=F, message=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+#plot mfa females
+p_female_mfa
+```
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
