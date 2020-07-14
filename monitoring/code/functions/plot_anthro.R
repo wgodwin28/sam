@@ -41,8 +41,8 @@ chartdat_wfh_2 <- data.frame(SD = rep(sd_labels, each = ht_max-ht_min+1),
                                who_centile2value(x = ht_min:ht_max, p = p, x_var = "lencm", y_var = "wtkg", sex = "Female"))))
 
 #weight for height 3-5 years
-ht_min <- min(pluck(df_list, "anthro") %>% filter(ageInDays >= 730) %>% select(height)) %>% round() - 1
-ht_max <- max(pluck(df_list, "anthro") %>% filter(ageInDays >= 730) %>% select(height)) %>% round() + 1
+ht_min <- min(pluck(df_list, "anthro") %>% filter(ageInDays >= 730) %>% select(height), na.rm = T) %>% round() - 1
+ht_max <- max(pluck(df_list, "anthro") %>% filter(ageInDays >= 730) %>% select(height), na.rm = T) %>% round() + 1
 chartdat_wfh_5 <- data.frame(SD = rep(sd_labels, each = ht_max-ht_min+1),
                              height = rep(ht_min:ht_max, times = 7),
                              wfh_male = unlist(map(p_frmSD, function(p)

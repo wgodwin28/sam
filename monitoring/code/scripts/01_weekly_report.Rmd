@@ -180,9 +180,8 @@ ggplot(total_perday, aes(x = interview_date, y = as.integer(total), color = Step
   xlab("Date") +
   ylab("Total participants") +
   scale_y_continuous(breaks= pretty_breaks()) +
-  scale_x_date(labels = date_format("%m/%d"), breaks = date_breaks("3 day")) +
+  scale_x_date(labels = date_format("%m/%d"), breaks = date_breaks("1 week")) +
   theme(legend.title = element_blank()) +
-  #scale_color_discrete(name="") +
   theme_bw()
 ```
 
@@ -355,6 +354,52 @@ bind_rows(age,
           anthro) %>%
   kable("latex", col.names = c(" ", " "))
 ```
+
+### WHZ ridgeline plots
+```{r, echo=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+# plot whz ridges by time point
+pluck(df_list, "anthro") %>%
+  ggplot(aes(whz_zscore, time_point, fill=factor(stat(quantile)))) +
+  stat_density_ridges(
+    geom = "density_ridges_gradient", calc_ecdf = TRUE,
+    quantiles = 4, quantile_lines = TRUE
+  ) +
+  scale_fill_viridis_d(name = "Quartiles") +
+  xlab("WHZ")
+```
+
+WHZ densities at each time point, colored by quartile of the distribution.
+
+```{r, echo=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+pluck(df_list, "anthro") %>%
+  ggplot(aes(whz_zscore, time_point)) +
+  geom_density_ridges(jittered_points=T, alpha=.7) +
+  xlab("WHZ")
+```
+
+WHZ densities at each time point, with the actual data points (jittered) filling each distribution.
+
+### MUAC ridgeline plots
+```{r, echo=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+# plot ridges of MUAC
+pluck(df_list, "anthro") %>%
+  ggplot(aes(muac, time_point, fill=factor(stat(quantile)))) +
+  stat_density_ridges(
+    geom = "density_ridges_gradient", calc_ecdf = TRUE,
+    quantiles = 4, quantile_lines = TRUE
+  ) +
+  scale_fill_viridis_d(name = "Quartiles")
+```
+
+MUAC densities at each time point, colored by quartile of the distribution.
+
+```{r, echo=F, warning=F, fig.height = 4.35, fig.width = 6.5}
+pluck(df_list, "anthro") %>%
+  ggplot(aes(muac, time_point)) +
+  geom_density_ridges(jittered_points=T, alpha=.7)
+```
+
+MUAC densities at each time point, with the actual data points (jittered) filling each distribution.
 
 ```{r, echo=F, warning=F}
 # calculate percent female
@@ -722,6 +767,26 @@ bind_rows(
 DN <- add_one(DN)
 ```
 
+## Reason not treated (Display `r DN`)
+```{r, echo=F, message=F, warning=F}
+# ids enrolled and treated
+ids_en <- pluck(df_list, "eligibility") %>% filter(!is.na(childID)) %>% distinct(childID) %>% pull
+ids_tr <- pluck(df_list, "treatment") %>% filter(!is.na(childID)) %>% distinct(childID) %>% pull
+
+# subset and table
+pluck(df_list, "treatment") %>% 
+  filter(childID %in% setdiff(ids_en, ids_tr)) %>%
+  select(id, csps_fra, child_firstname, childID, no_admin_treatment) %>%
+  mutate(no_admin_treatment = ifelse(is.na(no_admin_treatment), "None", no_admin_treatment)) %>%
+  kable("latex", col.names = c("Interview", "CSPS", "Child name", "Child ID", "Reason untreated")) %>%
+  row_spec(c(0), bold=T)
+```
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
 # Malaria-rapid diagnostic test results (Display `r DN`)
 ```{r, echo=F, message=F, warning=F}
 # number of csps
@@ -918,7 +983,8 @@ df_followup %>%
          days_late = as.Date(date, "%d%b%Y") - follow_update) %>%
   select(-weeks, -follow_update) %>% 
   arrange(csps_fra, -days_late) %>%
-  kable("latex", col.names = c("CSPS", "Child ID", "Time point", "Child name", "Enroll date", "Days late")) %>%
+  kable("latex", col.names = c("CSPS", "Child ID", "Time point", "Child name",
+                               "Enroll date", "Days late")) %>%
   row_spec(c(0), bold=T) %>%
   collapse_rows(1:2, latex_hline = 'custom', custom_latex_hline = 1:2,
                 row_group_label_position = 'identity')
@@ -975,12 +1041,15 @@ bind_rows(
   # count the unique kids (IDs) that have recovered-filter out duplicates by visit
   a %>%
     mutate(childID=substr(uniqID, 0, 7)) %>%
-    filter(!duplicated(childID)) %>%
+    group_by(childID, csps_fra) %>%
+    summarise(recovered=max(recovered)) %>%
+    #filter(!duplicated(childID)) %>%
     group_by(csps_fra) %>%
     summarise(visits=n(), recovered=sum(recovered)),
   a %>%
     mutate(childID=substr(uniqID, 0, 7)) %>%
-    filter(!duplicated(childID)) %>%
+    group_by(childID) %>%
+    summarise(recovered=max(recovered)) %>%
     summarise(visits=n(), recovered=sum(recovered)) %>%
     mutate(csps_fra="Overall")
 ) %>%
@@ -1033,7 +1102,7 @@ left_join(
   # grab just the most recent two muac measurements
   slice_head(n = 2) %>%
   mutate(week_num = if_else(week_num < 7, "recent_muac", "next_recent_muac")) %>%
-  # bind on the baseline muac
+  # bind on the baseline muac for just the children reporting recovery
   bind_rows(., 
             pluck(df_list, "anthro") %>%
               filter(time_point=="baseline" & childID %in% ids) %>%
@@ -1050,6 +1119,7 @@ left_join(
     by="childID"
   ) %>%
   select(childID, csps_fra, child_firstname, week_rec, everything()) %>%
+  # create variable that says if recovery is legit or not
   mutate(recovered = if_else(childID %in% rec_ids, "Yes", "No")) %>%
   kable("latex", col.names = c("Child ID", "CSPS", "Name", "Week recovered",
                                "MUAC 1", "MUAC 2", "MUAC 0", "True recovery")) %>%
@@ -1350,8 +1420,8 @@ pluck(df_list, "anthro") %>%
             by="childID") %>%
   select(csps_fra, childID, child_firstname, baseline, ends_with("dif")) %>%
   kable("latex", col.names = c("CSPS", "Child ID", "Name", "Baseline", "Week 1 change",
-                               "Week 2 change", "Week 3 change", "Week 4 change")) %>%
-  column_spec(1:8, width = "1.7cm") %>%
+                               "Week 2 change", "Week 3 change", "Week 4 change", "Week 5 change")) %>%
+  column_spec(1:9, width = "1.7cm") %>%
   row_spec(0, bold=T)
 ```
 
@@ -1376,8 +1446,8 @@ pluck(df_list, "anthro") %>%
             by="childID") %>%
   select(csps_fra, childID, child_firstname, baseline, ends_with("dif")) %>%
   kable("latex", col.names = c("CSPS", "Child ID", "Name", "Baseline", "Week 1 change", 
-                               "Week 2 change", "Week 3 change", "Week 4 change")) %>%
-  column_spec(1:8, width = "1.7cm") %>%
+                               "Week 2 change", "Week 3 change", "Week 4 change", "Week 5 change")) %>%
+  column_spec(1:9, width = "1.7cm") %>%
   row_spec(0, bold=T)
 ```
 
@@ -1415,7 +1485,7 @@ forms <- c("eligibility", "baseline", "malaria", "treatment", "rectal", "anthro"
 map_df(forms, find_duplicate_chids1, df_list) %>%
   filter(!is.na(childID)) %>%
   arrange(child_firstname) %>%
-  kable("latex", col.names = c("CSPS", "Interview IDs", "Child ID", "Child name", "Form name")) %>%
+  kable("latex", col.names = c("CSPS", "Interview IDs", "Unique ID", "Child name", "Form name")) %>%
   row_spec(0, bold=T) %>%
   column_spec(2, width = "3in")
 ```

@@ -89,10 +89,23 @@ pluck(df_list, "anthro") %<>%
 pluck(df_list, "anthro") %<>%
   mutate(muac=if_else(muac>45, muac/10, muac))
 
-# these two interviews are actually week 2
+# these interviews were coded to the wrong time point
 pluck(df_list, "anthro") %<>%
   mutate(time_point = ifelse(id=="26f7c048-f591-4f07-a1bc-bc88b69cdfeb", "week_2", time_point),
-         time_point = ifelse(id=="32255e9a-69e5-41ce-afce-6d5acc8a7d95", "week_2", time_point))
+         time_point = ifelse(id=="32255e9a-69e5-41ce-afce-6d5acc8a7d95", "week_2", time_point),
+         time_point = ifelse(id=="0d176cc8-df13-432c-bd92-ffa87abb6334", "week_2", time_point))
+
+pluck(df_list, "followup") %<>%
+  mutate(time_point = ifelse(id=="fd6f806b-1a3e-4323-b2c4-ca95d20eb08a", "week_2", time_point))
+
+# height measurement that's way too high-carry over previous week's height value
+pluck(df_list, "anthro") %<>%
+  mutate(height = ifelse(id=="75a09b86-fe43-4280-939b-b0f3f46542ee",
+                         pluck(df_list, "anthro") %>%
+                           filter(id=="a347315a-d502-41f3-91fb-07dcc73a5837") %>%
+                           select(height) %>%
+                           pull(), 
+                         height))
 
 #archive interviews##########################################################
 # read in list of interviews to drop

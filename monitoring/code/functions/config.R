@@ -21,6 +21,7 @@ library(DiagrammeR)
 library(DiagrammeRsvg)
 library(rsvg)
 library(growthstandards)
+library(ggridges)
 
 # define directories
 data_dir <- paste0(here::here(), "/monitoring/data/raw/")
