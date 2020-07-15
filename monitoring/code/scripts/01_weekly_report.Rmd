@@ -694,7 +694,8 @@ temp <- inner_join(
     select(childID, time_point, weight) %>% 
     pivot_wider(names_from = time_point, values_from = weight, values_fn = list(weight = mean)) %>%
     # convert to grams and adjust for baseline weight
-    mutate_at(vars(-matches("childID"), -matches("baseline")), list(dif = ~ ((. - baseline)*1000)/baseline)) %>%
+    mutate_at(vars(-matches("childID"), -matches("baseline")), 
+              list(dif = ~ ((. - baseline)*1000)/baseline)) %>%
     select(childID, contains("dif")),
   
   # calculate total days between each visit
@@ -1331,8 +1332,9 @@ discharge_ids <- pluck(df_list, "discharge") %>% distinct(childID) %>% pull
 pluck(df_list, "followup") %>%
   filter(childID %in% setdiff(childID, discharge_ids) & 
            grepl("malnutrition", other_reason_hospital)) %>%
-  select(csps_fra, child_firstname, child_dob, start_time) %>%
-  kable("latex", col.names = c("CSPS", "Child name", "Child DOB", "Follow-up date")) %>%
+  select(csps_fra, child_firstname, childID, child_dob, start_time, id) %>%
+  kable("latex", col.names = c("CSPS", "Child name", "Child ID", "Child DOB",
+                               "Follow-up date", "Interview")) %>%
   row_spec(0, bold=TRUE)
 ```
 
