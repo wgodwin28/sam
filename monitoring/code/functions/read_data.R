@@ -89,14 +89,19 @@ pluck(df_list, "anthro") %<>%
 pluck(df_list, "anthro") %<>%
   mutate(muac=if_else(muac>45, muac/10, muac))
 
-# these interviews were coded to the wrong time point
+# these interviews were coded to the wrong time point or child ID
 pluck(df_list, "anthro") %<>%
   mutate(time_point = ifelse(id=="26f7c048-f591-4f07-a1bc-bc88b69cdfeb", "week_2", time_point),
          time_point = ifelse(id=="32255e9a-69e5-41ce-afce-6d5acc8a7d95", "week_2", time_point),
-         time_point = ifelse(id=="0d176cc8-df13-432c-bd92-ffa87abb6334", "week_2", time_point))
+         time_point = ifelse(id=="0d176cc8-df13-432c-bd92-ffa87abb6334", "week_2", time_point),
+         time_point = ifelse(id=="60ace046-cb3c-4669-b339-16c5063efd54", "week_2", time_point),
+         time_point = ifelse(id=="7e6437c6-22c7-4b25-a0b8-07acd919c03d", "week_6", time_point),
+         childID = ifelse(id=="ac830c88-186a-4072-9aa5-a367dbaa0428", "B383329", childID))
 
 pluck(df_list, "followup") %<>%
-  mutate(time_point = ifelse(id=="fd6f806b-1a3e-4323-b2c4-ca95d20eb08a", "week_2", time_point))
+  mutate(time_point = ifelse(id=="fd6f806b-1a3e-4323-b2c4-ca95d20eb08a", "week_2", time_point),
+         time_point = ifelse(id=="37ec9fd5-5924-450e-a7f5-f08368761231", "week_2", time_point),
+         time_point = ifelse(id=="1dd9c262-5128-40fb-ac7b-302802601caf", "week_1", time_point))
 
 # height measurement that's way too high-carry over previous week's height value
 pluck(df_list, "anthro") %<>%

@@ -902,8 +902,11 @@ df_ltfu <- pluck(df_list, "followup") %>%
 
 # tabulate number with discharge form submitted
 df_dis <- pluck(df_list, "discharge") %>%
-  left_join(., pluck(df_list, "eligibility") %>% select(childID, enroll_date=start_time), by="childID") %>% 
-  mutate(time_point=as.numeric(difftime(as.Date(start_time), enroll_date, units = "weeks")),
+  left_join(., 
+            pluck(df_list, "eligibility") %>% 
+              select(childID, enroll_date=start_time),
+            by="childID") %>%
+  mutate(time_point=round(as.numeric(difftime(as.Date(start_time), enroll_date, units = "weeks"))),
          time_point=paste0("week_", time_point),
          time_point=ifelse(time_point=="week_0", "baseline", time_point),
          time_point=as.character(time_point),
@@ -923,9 +926,9 @@ df_5to7 <- pluck(df_list, "eligibility") %>%
   left_join(., 
             pluck(df_list, "followup") %>% 
               filter(!duplicated(uniqID)) %>%
-              select(id, childID, time_point), 
+              select(id, childID, time_point, vital_status), 
             by=c("childID", "time_point")) %>%
-  select(childID, enroll_date, time_point, expected, id, csps_fra, child_firstname)
+  select(childID, enroll_date, time_point, expected, id, csps_fra, child_firstname, vital_status)
 
 # expected to actual ratio
 df_followup <- pluck(df_list, "eligibility") %>%
@@ -941,27 +944,30 @@ df_followup <- pluck(df_list, "eligibility") %>%
   left_join(., 
             pluck(df_list, "followup") %>% 
               filter(!duplicated(uniqID)) %>% 
-              select(id, childID, time_point), 
+              select(id, childID, time_point, vital_status), 
             by=c("childID", "time_point")) %>%
-  select(childID, enroll_date, time_point, expected, id, csps_fra, child_firstname) %>%
+  select(childID, enroll_date, time_point, expected, id, csps_fra, child_firstname, vital_status) %>%
   bind_rows(., df_5to7)
 
 # make table of the actual to expected ratios
 df_followup %>%
+  mutate(actual=ifelse(vital_status %in% c("alive", "died"), 1, 0),
+         unknown=ifelse(vital_status %in% c("unknown", "moved"), 1, 0)) %>%
   group_by(time_point) %>%
   #finds the number of actual interviews by summing total non-missing interview keys
-  summarise(expected=sum(expected), actual=sum(!is.na(id))) %>%
+  summarise(expected=sum(expected), actual=sum(actual), 
+            unknown=sum(unknown)) %>%
   mutate(percnt=percent(actual/expected)) %>%
   arrange(time_point) %>%
-  left_join(., df_ltfu, by="time_point") %>%
-  mutate(missing=ltfu+(expected-actual)) %>%
+  #left_join(., df_ltfu, by="time_point") %>%
+  #mutate(missing=ltfu+(expected-actual)) %>%
   left_join(., df_dis, by="time_point") %>%
   mutate_if(is.double, function(x) ifelse(is.na(x), 0, x)) %>%
-  kable("latex", col.names = c("Timepoint", "Expected", "Actual", 
-                               "Coverage", "LTFU", "Missing forms", "N discharged")) %>%
+  kable("latex", col.names = c("Timepoint", "Expected", "Actual", "Moved/unknown",
+                               "Coverage", "N discharged")) %>%
   row_spec(c(0), bold=T)
 ```
-**LTFU** = lost to follow-up (vital status is moved/unknown).
+**Moved/unknown** = vital status is moved or unknown.
 **Coverage** = fraction of actual over expected visits.
 Number expected for Weeks 5 through 7 are the number of kids who are in the week 5-7 windows and who have not had a discharge form submitted.
 **Missing forms** = No follow-up form of any kind (including discharge or moved/unknown) submitted.
@@ -974,6 +980,14 @@ DN <- add_one(DN)
 
 ### Participants missing follow-up (Display `r DN`)
 ```{r, echo=F, message=F, warning=F}
+# pull the children that submitted missed visit form
+ids <- pluck(df_list, "miss_visit") %>% 
+  pull(childID)
+
+# pull the children that submitted discharge form
+discharge_ids <- pluck(df_list, "discharge") %>% 
+  pull(childID)
+
 # make table of kids missing follow-up
 df_followup %>% 
   filter(expected==1 & is.na(id)) %>%
@@ -981,15 +995,20 @@ df_followup %>%
   select(csps_fra, childID, time_point, child_firstname, enroll_date) %>%
   mutate(weeks = weeks(substr(time_point, 6, 6)),
          follow_update = weeks + enroll_date,
-         days_late = as.Date(date, "%d%b%Y") - follow_update) %>%
+         days_late = as.Date(date, "%d%b%Y") - follow_update,
+         missv_form = if_else(childID %in% ids, "Yes", "No"),
+         discharge_form = if_else(childID %in% discharge_ids, "Yes", "No")) %>%
   select(-weeks, -follow_update) %>% 
   arrange(csps_fra, -days_late) %>%
   kable("latex", col.names = c("CSPS", "Child ID", "Time point", "Child name",
-                               "Enroll date", "Days late")) %>%
+                               "Enroll date", "Days late", "MVFS?", "DFS?")) %>%
   row_spec(c(0), bold=T) %>%
   collapse_rows(1:2, latex_hline = 'custom', custom_latex_hline = 1:2,
                 row_group_label_position = 'identity')
 ```
+**MVFS?** = Missed visit form submitted for that child?
+**DFS?** = Discharge form submitted for that child?
+
 
 ```{r, echo=F}
 # display number
@@ -1030,7 +1049,8 @@ a <- pluck(df_list, "eligibility") %>%
              TRUE ~ 0
            )
          ) %>%
-  select(waz_zscore, muac, time_point, uniqID, signs_of_malnutrition, recovered, csps_fra)
+  select(waz_zscore, muac, time_point, uniqID, signs_of_malnutrition, 
+         recovered, csps_fra, id, child_firstname)
 
 # store the ids of kids that actually have recovered
 rec_ids <- a %>% mutate(childID=substr(uniqID, 0, 7)) %>% 
@@ -1059,6 +1079,21 @@ bind_rows(
   row_spec(c(0, overall_rowno), bold=T)
 ```
 **Recovered** = dependent on the enrollment reason for each child. A child was enrolled for MUAC < 115 mm must report MUAC >= 125 mm for 2 consecutive weeks. A child enrolled for WHZ < -3 must have WHZ >= -2 for 2 consecutive weeks. A child enrolled for both MUAC < 115 mm and WHZ < -3 must attain MUAC >= 125 mm AND WHZ >= -2 for 2 consecutive weeks
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
+## Recovered paticipants (Display `r DN`)
+```{r, echo=F, message=F, warning=F}
+a %>%
+  mutate(childID=substr(uniqID, 0, 7)) %>%
+  filter(recovered==1) %>%
+  select(csps_fra, id, childID, child_firstname, time_point) %>%
+  kable("latex", col.names = c("CSPS", "Interview ID", "Child ID", "Name", "Recovery week")) %>%
+  row_spec(c(0), bold=T)
+```
 
 ```{r, echo=F}
 # display number
@@ -1147,17 +1182,24 @@ pluck(df_list, "eligibility") %>%
          "week_4"=if_else(Sys.Date()-start_time>=28, 1, 0)) %>%
   gather(key = time_point, value = expected, -start_time, -childID) %>%
   left_join(., 
-            pluck(df_list, "anthro") %>% filter(time_point!="baseline" & !duplicated(uniqID)), 
+            pluck(df_list, "anthro") %>% 
+              filter(time_point!="baseline" & !duplicated(uniqID)), 
             by=c("childID", "time_point")) %>%
-  select(childID, start_time.x, time_point, expected, id) %>%
+  select(childID, start_time.x, time_point, expected, id, height, weight) %>%
+  # create indicators for if child actually had anthro measured or not
+  mutate(actual=ifelse(!is.na(weight), 1, 0),
+         missing=ifelse(is.na(weight) & !is.na(id), 1, 0)) %>%
   group_by(time_point) %>%
   #finds the number of actual interviews by summing total non-missing interview keys
-  summarise(expected=sum(expected), actual=sum(!is.na(id))) %>%
+  summarise(expected=sum(expected), actual=sum(actual), missing=sum(missing)) %>%
   mutate(percnt=percent(actual/expected)) %>%
   arrange(time_point) %>%
-  kable("latex", col.names = c("Timepoint", "Expected", "Actual", "Percent")) %>%
+  kable("latex", col.names = c("Timepoint", "Expected", "Actual", "Missing anthro", "Percent")) %>%
   row_spec(c(0), bold=T)
 ```
+
+**Actual** = number of participants with anthro measurement
+**Missing anthro** = number of participants missing anthro values on interview
 
 ```{r, echo=F}
 # display number
@@ -1422,7 +1464,8 @@ pluck(df_list, "anthro") %>%
             by="childID") %>%
   select(csps_fra, childID, child_firstname, baseline, ends_with("dif")) %>%
   kable("latex", col.names = c("CSPS", "Child ID", "Name", "Baseline", "Week 1 change",
-                               "Week 2 change", "Week 3 change", "Week 4 change", "Week 5 change")) %>%
+                               "Week 2 change", "Week 3 change", "Week 4 change", "Week 5 change",
+                               "Week 6 change", "Week 7 change")) %>%
   column_spec(1:9, width = "1.7cm") %>%
   row_spec(0, bold=T)
 ```
@@ -1448,7 +1491,8 @@ pluck(df_list, "anthro") %>%
             by="childID") %>%
   select(csps_fra, childID, child_firstname, baseline, ends_with("dif")) %>%
   kable("latex", col.names = c("CSPS", "Child ID", "Name", "Baseline", "Week 1 change", 
-                               "Week 2 change", "Week 3 change", "Week 4 change", "Week 5 change")) %>%
+                               "Week 2 change", "Week 3 change", "Week 4 change", "Week 5 change",
+                               "Week 6 change", "Week 7 change")) %>%
   column_spec(1:9, width = "1.7cm") %>%
   row_spec(0, bold=T)
 ```
