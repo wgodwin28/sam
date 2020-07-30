@@ -55,7 +55,7 @@ source(paste0(here::here(), "/monitoring/code/functions/config.R"))
 #devtools::load_all('~/Desktop/utility/')
 ```
 
-```{bash run api, eval=F, echo=F, message=F}
+```{bash run api, eval=F, echo=F, message=F, include=F}
 # bash script to export all the dataz
 commcare-export --output-format csv --output ../../data/raw/temp.zip --project nouna-pilots --query ../../tables/api_metadata.xlsx --username william.godwin@ucsf.edu --password Mordor2018! --since 2020-06-01
 ```
@@ -710,7 +710,10 @@ temp <- inner_join(
   mutate(week_1_vel=week_1_dif/week_1_days,
          week_2_vel=week_2_dif/week_2_days,
          week_3_vel=week_3_dif/week_3_days,
-         week_4_vel=week_4_dif/week_4_days)
+         week_4_vel=week_4_dif/week_4_days,
+         week_5_vel=week_5_dif/week_5_days,
+         week_6_vel=week_6_dif/week_6_days,
+         week_7_vel=week_7_dif/week_7_days)
 
 # tabulate the mean/SD velocity by CSPS
 bind_rows(
@@ -721,16 +724,23 @@ bind_rows(
   summarise(week_1=mean_sd(week_1_vel),
             week_2=mean_sd(week_2_vel),
             week_3=mean_sd(week_3_vel),
-            week_4=mean_sd(week_4_vel)),
+            week_4=mean_sd(week_4_vel),
+            week_5=mean_sd(week_5_vel),
+            week_6=mean_sd(week_6_vel),
+            week_7=mean_sd(week_7_vel)),
   temp %>%
     summarise(week_1=mean_sd(week_1_vel),
               week_2=mean_sd(week_2_vel),
               week_3=mean_sd(week_3_vel),
-              week_4=mean_sd(week_4_vel)) %>%
+              week_4=mean_sd(week_4_vel),
+              week_5=mean_sd(week_5_vel),
+              week_6=mean_sd(week_6_vel),
+              week_7=mean_sd(week_7_vel)) %>%
     mutate(csps_fra="Overall")
 ) %>%
   # table it
-  kable("latex", col.names = c("CSPS", "Week 1", "Week 2", "Week 3", "Week 4")) %>%
+  kable("latex", col.names = c("CSPS", "Week 1", "Week 2", "Week 3", "Week 4", 
+                               "Week 5", "Week 6", "Week 7")) %>%
   row_spec(c(0, overall_rowno), bold=T)
 
 if(Sys.Date() > as.Date("2020-07-12")){
@@ -1465,7 +1475,7 @@ pluck(df_list, "anthro") %>%
   select(csps_fra, childID, child_firstname, baseline, ends_with("dif")) %>%
   kable("latex", col.names = c("CSPS", "Child ID", "Name", "Baseline", "Week 1 change",
                                "Week 2 change", "Week 3 change", "Week 4 change", "Week 5 change",
-                               "Week 6 change", "Week 7 change")) %>%
+                               "Week 6 change", "Week 7 change", "Week 8 change")) %>%
   column_spec(1:9, width = "1.7cm") %>%
   row_spec(0, bold=T)
 ```
@@ -1492,7 +1502,7 @@ pluck(df_list, "anthro") %>%
   select(csps_fra, childID, child_firstname, baseline, ends_with("dif")) %>%
   kable("latex", col.names = c("CSPS", "Child ID", "Name", "Baseline", "Week 1 change", 
                                "Week 2 change", "Week 3 change", "Week 4 change", "Week 5 change",
-                               "Week 6 change", "Week 7 change")) %>%
+                               "Week 6 change", "Week 7 change", "Week 8 change")) %>%
   column_spec(1:9, width = "1.7cm") %>%
   row_spec(0, bold=T)
 ```
@@ -1565,6 +1575,7 @@ left_join(
 ) %>%
   mutate(change_weight = round(abs(anthro_weight-child_weight), digits = 2)) %>%
   filter(change_weight>.5) %>%
-  kable("latex", col.names = c("CSPS", "Child name", "Child ID", "Anthro wt", "Treat wt", "Difference (kg)")) %>%
+  kable("latex", col.names = c("CSPS", "Child name", "Child ID", "Anthro wt", "Treat wt", 
+                               "Difference (kg)")) %>%
   row_spec(0, bold=T)
 ```
