@@ -78,12 +78,14 @@ df_list <- names(df_list) %>%
 #anthro fixes###################################################################
 # add average weight and height for anthro measurements
 pluck(df_list, "anthro") %<>%
-  mutate(weight = (weight_1 + weight_2 + weight_3) / 3,
-         height = (height_1 + height_2 + height_3) / 3,
-         muac = (muac_1 + muac_2 + muac_3) / 3,
-         child_dob = as.Date(child_dob),
+  mutate(child_dob = as.Date(child_dob),
          age_months = as.integer(age_months),
-         ageInDays = ifelse(Dob_known==1, difftime(as.Date(start_time), child_dob), age_months*30))
+         ageInDays = ifelse(Dob_known==1, difftime(as.Date(start_time), child_dob), age_months*30)) %>%
+  rowwise() %>% 
+  mutate(weight = median(c(weight_1, weight_2, weight_3)),
+         height = median(c(height_1, height_2, height_3)),
+         muac = median(c(muac_1, muac_2, muac_3))) %>%
+  ungroup()
 
 # fix muac - some are recorded in cm, some in mm. convert everything >45 to all cm
 pluck(df_list, "anthro") %<>%
@@ -111,6 +113,10 @@ pluck(df_list, "anthro") %<>%
                            select(height) %>%
                            pull(), 
                          height))
+
+# wrong sample id scanned in rectal swab form
+pluck(df_list, "rectal") %<>%
+  mutate(rectalID = ifelse(id=="04a4afed-454d-431a-9c51-d29cca5212ba", "B005886", rectalID))
 
 #archive interviews##########################################################
 # read in list of interviews to drop
