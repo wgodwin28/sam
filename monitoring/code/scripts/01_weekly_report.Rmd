@@ -78,7 +78,7 @@ sum_n_percent <- function(x){
 #########################################################################
 ```
 
-```{bash run api, eval=F, echo=F, message=F, include=F}
+```{bash run api, eval=T, echo=F, message=F, include=F}
 # bash script to export all the dataz
 commcare-export --output-format csv --output ../../data/raw/temp.zip --project nouna-pilots --query ../../tables/api_metadata.xlsx --username william.godwin@ucsf.edu --password Mordor2018! --since 2020-06-01
 ```
