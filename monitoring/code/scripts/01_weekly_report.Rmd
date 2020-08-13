@@ -1056,6 +1056,79 @@ Number expected for Weeks 5 through 7 are the number of kids who are in the week
 DN <- add_one(DN)
 ```
 
+## Mortality rate (Display `r DN`)
+```{r, echo=F, warning=F, message=F}
+# calculate number of deaths
+deaths <- bind_rows(
+  # by csps
+  pluck(df_list, "followup") %>%
+    mutate(died = ifelse(vital_status=="died", 1, 0)) %>%
+    group_by(csps_fra) %>%
+    summarise(deaths = sum(died, na.rm=T)),
+  # overall
+  pluck(df_list, "followup") %>%
+    mutate(died = ifelse(vital_status=="died", 1, 0)) %>%
+    summarise(deaths = sum(died, na.rm=T)) %>%
+    mutate(csps_fra = "Overall")
+)
+
+# person-time
+bind_rows(
+  # calculate person time by csps
+  pluck(df_list, "followup") %>%
+    group_by(childID) %>%
+    # find most recent visit
+    mutate(last_fu = max(start_time)) %>%
+    ungroup() %>%
+    filter(start_time==last_fu) %>%
+    left_join(.,
+              pluck(df_list, "anthro") %>%
+                filter(time_point == "baseline") %>%
+                select(childID, enroll_time=start_time),
+              by="childID") %>%
+    mutate(person_time = as.numeric(difftime(last_fu, enroll_time))) %>%
+    # person time by csps
+    group_by(csps_fra) %>%
+    summarise(person_time = sum(person_time, na.rm=T)),
+  
+  # calculate person time overall
+  pluck(df_list, "followup") %>%
+    group_by(childID) %>%
+    # find most recent visit
+    mutate(last_fu = max(start_time)) %>%
+    ungroup() %>%
+    filter(start_time==last_fu) %>%
+    left_join(.,
+              pluck(df_list, "anthro") %>%
+                filter(time_point == "baseline") %>%
+                select(childID, enroll_time=start_time),
+              by="childID") %>%
+    mutate(person_time = as.numeric(difftime(last_fu, enroll_time))) %>%
+    # person time overall
+    summarise(person_time = sum(person_time, na.rm=T)) %>%
+    mutate(csps_fra="Overall")
+) %>%
+  left_join(deaths,
+            .,
+            by="csps_fra"
+  ) %>%
+  mutate(person_time = round(person_time/365.25, 2),
+         rate = round(pois.exact(deaths, person_time)[[3]]*1000, 1),
+         lower = round(pois.exact(deaths, person_time)[[4]]*1000, 1),
+         upper = round(pois.exact(deaths, person_time)[[5]]*1000, 1),
+         rate = paste0(rate, " (", lower, " to ", upper, ")")) %>%
+  select(csps_fra, deaths, person_time, rate) %>%
+  kable("latex", col.names = c("CSPS", "Deaths", "Person-years",
+                               "Mortality/1000 py (95% CI)")) %>%
+  row_spec(c(0, 7), bold=T)
+  
+```
+
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
 ### Participants missing follow-up (Display `r DN`)
 ```{r, echo=F, message=F, warning=F}
 # pull the children that submitted missed visit form
@@ -1094,7 +1167,7 @@ df_followup %>%
 DN <- add_one(DN)
 ```
 
-## Recovery by CSPS (Display `r DN`)
+### Recovery by CSPS (Display `r DN`)
 ```{r, echo=F, message=F, warning=F}
 # number of csps
 overall_rowno <- pluck(df_list, "anthro") %>% 
@@ -1164,7 +1237,7 @@ bind_rows(
 DN <- add_one(DN)
 ```
 
-## Recovered paticipants (Display `r DN`)
+### Recovered paticipants (Display `r DN`)
 ```{r, echo=F, message=F, warning=F}
 a %>%
   mutate(childID=substr(uniqID, 0, 7)) %>%
@@ -1179,7 +1252,7 @@ a %>%
 DN <- add_one(DN)
 ```
 
-## Reported recoveries (Display `r DN`)
+### Reported recoveries (Display `r DN`)
 ```{r, echo=F, message=F, warning=F}
 # merge on the date from baseline
 rec_date <- left_join(
