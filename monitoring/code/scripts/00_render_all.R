@@ -32,9 +32,9 @@ if(day == "Friday"){
                     envir = new.env())
 }else{
   #daily report
-  rmarkdown::render(input = paste0(code_dir_main, "05_malaria_report.Rmd"),
+  rmarkdown::render(input = paste0(code_dir_main, "03_dsmc_report.Rmd"),
                     output_format ="pdf_document",
-                    output_file = paste0(out_dir_d, "sam_malaria_report_", date),
+                    output_file = paste0(out_dir_d, "sam_dsmc_report_", date),
                     #envir = new.env(),
                     params = list(study="g"))
 }

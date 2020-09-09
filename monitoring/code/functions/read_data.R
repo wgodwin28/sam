@@ -7,6 +7,13 @@ drop_ints <- function(df_name, df_list, bad_interviews){
     filter(id %in% setdiff(id, bad_interviews))
 }
 
+# drop all interviews with elise as first name bc those were training interviews
+drop_elise <- function(df_name){
+  pluck(df_list, df_name) %>%
+    mutate(child_firstname = str_to_upper(child_firstname)) %>%
+    filter(child_firstname!="ELISE")
+}
+
 # add child name to avoid breaking report validation/duplicate check functions
 add_childname <- function(df_name, df_list){
   pluck(df_list, df_name) %>%
@@ -27,19 +34,9 @@ convert_date <- function(df_name, df_list){
 #############################################################################
 #Read in data################################################################
 #############################################################################
-# dirs <- list.dirs(paste0(here::here(), "/monitoring/data/raw/", date))[2:10]
-# form_names <- c("eligibility", "baseline", "anthro", "malaria", "rectal", "treatment", "followup", "discharge", "miss_visit")
-# 
-# # read each form into large list
-# df_list <- map(dirs, function(d){
-#   t <- read_csv(paste0(d, "/Forms.csv"))
-#   names(t) <- str_remove(names(t), "form.")
-#   return(t)
-# }) %>%
-#   setNames(form_names)
-
 in_dir <- paste0(data_dir, date)
-form_names <- c("eligibility", "baseline", "anthro", "malaria", "rectal", "treatment", "followup", "discharge", "miss_visit")
+form_names <- c("eligibility", "baseline", "anthro", "malaria", "rectal", 
+                "treatment", "followup", "discharge", "miss_visit")
 
 # read each form into large list
 df_list <- map(form_names, function(f){
@@ -98,12 +95,19 @@ pluck(df_list, "anthro") %<>%
          time_point = ifelse(id=="0d176cc8-df13-432c-bd92-ffa87abb6334", "week_2", time_point),
          time_point = ifelse(id=="60ace046-cb3c-4669-b339-16c5063efd54", "week_2", time_point),
          time_point = ifelse(id=="7e6437c6-22c7-4b25-a0b8-07acd919c03d", "week_6", time_point),
+         time_point = ifelse(id=="382c8ae6-f427-4eed-90d1-e37a8a70e869", "week_2", time_point),
+         time_point = ifelse(id=="946a0c77-4000-4f1a-86de-38c8f1de371f", "week_8", time_point),
+         time_point = ifelse(id=="9218ad9c-1092-40b0-a887-fccdbb321c32", "week_5", time_point),
+         time_point = ifelse(id=="5e067572-fe92-43cc-95e1-b8859c90d786", "week_2", time_point),
          childID = ifelse(id=="ac830c88-186a-4072-9aa5-a367dbaa0428", "B383329", childID))
 
 pluck(df_list, "followup") %<>%
   mutate(time_point = ifelse(id=="fd6f806b-1a3e-4323-b2c4-ca95d20eb08a", "week_2", time_point),
          time_point = ifelse(id=="37ec9fd5-5924-450e-a7f5-f08368761231", "week_2", time_point),
-         time_point = ifelse(id=="1dd9c262-5128-40fb-ac7b-302802601caf", "week_1", time_point))
+         time_point = ifelse(id=="1dd9c262-5128-40fb-ac7b-302802601caf", "week_1", time_point),
+         time_point = ifelse(id=="380b3377-07f7-4c94-95d8-07be8b2c76c4", "week_2", time_point),
+         time_point = ifelse(id=="ff1aa6e8-34ea-49d3-8870-1d897a446326", "week_2", time_point),
+         childID = ifelse(id=="791263cd-2f10-4bcd-872a-2bd9dad44b68", "B236931", childID))
 
 # height measurement that's way too high-carry over previous week's height value
 pluck(df_list, "anthro") %<>%
@@ -126,4 +130,13 @@ int_IDs <- read_csv(paste0(tab_dir, "incident_log_table.csv")) %>%
 # drop bad or duplicate interviews
 df_list <- names(df_list) %>%
   map(drop_ints, df_list, int_IDs) %>%
+  setNames(form_names)
+
+# correct child name variable in malaria form
+pluck(df_list, "malaria") %<>%
+  mutate(child_firstname=childs_first_name)
+
+# drop training interviews that were accidentally submitted
+df_list <- names(df_list) %>%
+  map(drop_elise) %>%
   setNames(form_names)

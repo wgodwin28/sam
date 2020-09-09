@@ -43,39 +43,13 @@ knitr::opts_chunk$set(message = FALSE)
 rm(list=ls())
 options(max.print = 10000)
 date <- format(Sys.Date(), "%d%b%Y")
-#date <- "23Jun2020"
+#date <- "28Aug2020"
 
 #disable scientific notation
 options(scipen = 999)
 
 # configure directories, load libraries and base functions
 source(paste0(here::here(), "/monitoring/code/functions/config.R"))
-
-#load utility package full of necessary functions
-#devtools::load_all('~/Desktop/utility/')
-
-# custom functions ####################################################
-# produce formatted mean and standard deviation of vector
-mean_sd <- function(x){
-  # mean
-  m <- mean(x, na.rm = T) %>% round(1)
-  
-  # standard deviation
-  s <- sd(x, na.rm = T) %>% round(1)
-  
-  # return formatted product
-  return(paste0(m, " (", s, ")"))
-}
-
-# function that produces sum and percent of binary vector input
-sum_n_percent <- function(x){
-  s <- sum(x, na.rm = T)
-  
-  per <- percent(sum(x, na.rm = T)/length(x))
-  
-  return(paste0(s, " (", per, ")"))
-}
-#########################################################################
 ```
 
 ```{bash run api, eval=T, echo=F, message=F, include=F}
@@ -106,9 +80,9 @@ el_crit <- c("abx_use", "clin_comp", "inpatient", "edema", "growth_faltering_ill
 pluck(df_list, "eligibility") %<>%
   mutate(screened = if_else(!duplicated(childID) | is.na(childID), 1, 0),
          eligible = if_else(str_detect(inclusion_criteria, el_crit) & 
-                              (muac_under115==1 | whz_zscore_ind==1), 1, 0),
+                              (muac_under115==1 | whz_zscore_ind==1) & !duplicated(childID), 1, 0),
          refused = if_else(eligible==1 & is.na(childID), 1, 0),
-         enrolled = if_else(!is.na(childID), 1, 0))
+         enrolled = if_else(!is.na(childID) & !duplicated(childID), 1, 0))
     
 # tabulate the indicators and create table
 temp.table <- 
@@ -203,7 +177,7 @@ ggplot(total_perday, aes(x = interview_date, y = as.integer(total), color = Step
   xlab("Date") +
   ylab("Total participants") +
   scale_y_continuous(breaks= pretty_breaks()) +
-  scale_x_date(labels = date_format("%m/%d"), breaks = date_breaks("1 week")) +
+  scale_x_date(labels = date_format("%m/%d"), breaks = date_breaks("2 week")) +
   theme(legend.title = element_blank()) +
   theme_bw()
 ```
@@ -267,7 +241,8 @@ pluck(df_list, "eligibility") %<>%
          exclz_clin_comp = if_else(str_detect(inclusion_criteria, "clin_comp"), 0, 1),
          exclz_inpatient = if_else(str_detect(inclusion_criteria, "inpatient"), 0, 1),
          exclz_edema = if_else(str_detect(inclusion_criteria, "edema"), 0, 1),
-         exclz_growth_faltering_illness = if_else(str_detect(inclusion_criteria, "growth_faltering_illness"), 0, 1),
+         exclz_growth_faltering_illness = if_else(str_detect(inclusion_criteria,
+                                                             "growth_faltering_illness"), 0, 1),
          exclz_prior__admission = if_else(str_detect(inclusion_criteria, "prior__admission"), 0, 1),
          exclz_feeding = if_else(str_detect(inclusion_criteria, "feeding"), 0, 1),
          exclz_Study_area = if_else(str_detect(inclusion_criteria, "Study_area"), 0, 1),
@@ -956,7 +931,6 @@ bind_rows(
   row_spec(c(0, overall_rowno), bold=T)
 ```
 
-
 \newpage
 
 ```{r, echo=F}
@@ -1086,7 +1060,7 @@ bind_rows(
                 filter(time_point == "baseline") %>%
                 select(childID, enroll_time=start_time),
               by="childID") %>%
-    mutate(person_time = as.numeric(difftime(last_fu, enroll_time))) %>%
+    mutate(person_time = as.numeric(difftime(last_fu, enroll_time, units = "days"))) %>%
     # person time by csps
     group_by(csps_fra) %>%
     summarise(person_time = sum(person_time, na.rm=T)),
@@ -1103,7 +1077,7 @@ bind_rows(
                 filter(time_point == "baseline") %>%
                 select(childID, enroll_time=start_time),
               by="childID") %>%
-    mutate(person_time = as.numeric(difftime(last_fu, enroll_time))) %>%
+    mutate(person_time = as.numeric(difftime(last_fu, enroll_time, units = "days"))) %>%
     # person time overall
     summarise(person_time = sum(person_time, na.rm=T)) %>%
     mutate(csps_fra="Overall")
@@ -1237,13 +1211,14 @@ bind_rows(
 DN <- add_one(DN)
 ```
 
-### Recovered paticipants (Display `r DN`)
+### Recovered participants (Display `r DN`)
 ```{r, echo=F, message=F, warning=F}
 a %>%
   mutate(childID=substr(uniqID, 0, 7)) %>%
   filter(recovered==1) %>%
   select(csps_fra, id, childID, child_firstname, time_point) %>%
-  kable("latex", col.names = c("CSPS", "Interview ID", "Child ID", "Name", "Recovery week")) %>%
+  kable("latex", col.names = c("CSPS", "Interview ID", "Child ID", "Name", "Recovery week"),
+        longtable=T) %>%
   row_spec(c(0), bold=T)
 ```
 
@@ -1309,12 +1284,12 @@ left_join(
   select(childID, csps_fra, child_firstname, week_rec, everything()) %>%
   # create variable that says if recovery is legit or not
   mutate(recovered = if_else(childID %in% rec_ids, "Yes", "No")) %>%
-  kable("latex", col.names = c("Child ID", "CSPS", "Name", "Week recovered",
-                               "MUAC 1", "MUAC 2", "MUAC 0", "True recovery")) %>%
+  kable("latex", longtable = T, col.names = c("Child ID", "CSPS", "Name", "Week recovered",
+                               "MUAC 1", "MUAC 2", "MUAC 0", "True rec?")) %>%
   row_spec(c(0), bold=T)
 ```
 
-**MUAC 1** = MUAC at time of recovery. **MUAC 2** = MUAC at week before recovery. **MUAC 0** = MUAC at baseline. **True recovery** = recovered according to study defintion.
+**MUAC 1** = MUAC at time of recovery. **MUAC 2** = MUAC at week before recovery. **MUAC 0** = MUAC at baseline. **True rec?** = recovered according to study defintion.
 
 ```{r, echo=F}
 # display number
@@ -1403,13 +1378,20 @@ pluck(df_list, "discharge") %>%
   row_spec(0, bold=TRUE)
 ```
 
+```{r, echo=F}
+# display number
+DN <- add_one(DN)
+```
+
 \vspace{2em}
 
+## Discharge reason (Display `r DN`)
 ```{r, echo=F, message=F}
 # diplay discharge reason
 pluck(df_list, "discharge") %>%
   select(csps_fra, childID, child_firstname, date_of_discharge, reason_for_discharge) %>%
-  kable("latex", col.names = c("CSPS", "Child ID", "Child first name", "Date of discharge", "Reason")) %>%
+  kable("latex", longtable = T, col.names = c("CSPS", "Child ID", "Child first name",
+                                              "Date of discharge", "Reason")) %>%
   row_spec(0, bold=TRUE)
 ```
 
@@ -1621,7 +1603,7 @@ pluck(df_list, "anthro") %>%
   select(csps_fra, childID, child_firstname, baseline, ends_with("dif")) %>%
   kable("latex", col.names = c("CSPS", "Child ID", "Name", "Baseline", "Week 1 change",
                                "Week 2 change", "Week 3 change", "Week 4 change", "Week 5 change",
-                               "Week 6 change", "Week 7 change", "Week 8 change")) %>%
+                               "Week 6 change", "Week 7 change", "Week 8 change"), longtable=T) %>%
   column_spec(1:9, width = "1.7cm") %>%
   row_spec(0, bold=T)
 ```

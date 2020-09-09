@@ -34,3 +34,4 @@ tab_dir <- paste0(here::here(), "/monitoring/tables/")
 
 # source base functions
 source(paste0(code_dir, "consort_diagram.R"))
+source(paste0(code_dir, "utility.R"))
